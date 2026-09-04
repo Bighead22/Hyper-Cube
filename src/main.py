@@ -1,4 +1,7 @@
 #python main.py
+#pip install cmu-graphics
+
+
 import math
 from cmu_graphics import *
 
