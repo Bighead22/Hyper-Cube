@@ -4,34 +4,34 @@ from cmu_graphics import *
 
 def onAppStart(app):
     
-    app.recoil = 0.3
+    app.recoil = 0.5
     app.stepsPerSecond = 30
     app.playerAngle = 0
     app.playerX = 375
     app.playerY = 375
     app.playerXSpeed = 0
     app.playerYSpeed = 0
-    app.accel = 0.5
-    app.drag = 0.995
+    app.accel = 0.75
+    app.drag = 0.99
     
     app.mouseX = 375
     app.mouseY = 375
     
-    # Store active projectiles
+    
     app.bullets = []
     app.bulletSpeed = 15
 
 def onMousePress(app, mouseX, mouseY):
-    # Calculate vector from player to mouse at click time
+    
     dx = mouseX - app.playerX
     dy = mouseY - app.playerY
     angle = math.atan2(dy, dx)
     
-    # Calculate velocity components
+    
     vx = math.cos(angle) * app.bulletSpeed
     vy = math.sin(angle) * app.bulletSpeed
     
-    # Add projectile starting at player position
+    
     app.bullets.append({'x': app.playerX,'y': app.playerY,'vx': vx,'vy': vy})
     app.playerXSpeed -= vx*app.recoil
     app.playerYSpeed -= vy*app.recoil
@@ -79,8 +79,13 @@ def redrawAll(app):
     drawRect(0, 0, 750, 750, fill=rgb(0, 5, 20))
     
     for bullet in app.bullets:
-        drawCircle(bullet['x'], bullet['y'], 2, fill=rgb(255, 200, 0))
-        drawCircle(bullet['x'], bullet['y'], 5, fill=rgb(255, 200, 0), opacity=10)
+        drawCircle(bullet['x'], bullet['y'], 2, fill=rgb(0, 200, 200),border=rgb(255, 255, 255), borderWidth=1)
+        
+        #bullet trail
+        drawCircle(bullet['x'], bullet['y'], 5, fill=rgb(0, 255, 255), opacity=10)
+        drawCircle(bullet['x']-bullet['vx']*0.2, bullet['y']-bullet['vy']*0.2, 4, fill=rgb(0, 255, 255), opacity=8)
+        drawCircle(bullet['x']-bullet['vx']*0.4, bullet['y']-bullet['vy']*0.4, 3, fill=rgb(0, 255, 255), opacity=6)
+        drawCircle(bullet['x']-bullet['vx']*0.6, bullet['y']-bullet['vy']*0.6, 2, fill=rgb(0, 255, 255), opacity=4)
     
     # Glow trail
     trail(app)
