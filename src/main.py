@@ -4,6 +4,7 @@ from cmu_graphics import *
 
 def onAppStart(app):
     app.stepsPerSecond = 30
+    app.playerAngle = 0
     app.playerX = 375
     app.playerY = 375
     app.playerXSpeed = 0
@@ -48,6 +49,7 @@ def onStep(app):
         app.playerXSpeed += math.cos(angle) * app.accel
         app.playerYSpeed += math.sin(angle) * app.accel
     
+    app.playerAngle = math.degrees(math.atan2(dy, dx))
     app.playerX += app.playerXSpeed
     app.playerY += app.playerYSpeed
     app.playerXSpeed *= app.drag
@@ -62,21 +64,27 @@ def onStep(app):
     if app.playerX > 725: app.playerX = 725
     if app.playerY < 25: app.playerY = 25
     if app.playerY > 725: app.playerY = 725
+    
+def trail(app):
+    drawRect(app.playerX - app.playerXSpeed * 3-5, app.playerY - app.playerYSpeed * 3-5, 10, 10, fill=rgb(255, 0, 0), opacity=5, border=rgb(255, 255, 255), borderWidth=1, rotateAngle=app.playerAngle)
+    drawRect(app.playerX - app.playerXSpeed * 2.5-5, app.playerY - app.playerYSpeed * 2.5-5, 10, 10, fill=rgb(255, 0, 0), opacity=6, border=rgb(255, 255, 255), borderWidth=1, rotateAngle=app.playerAngle)
+    drawRect(app.playerX - app.playerXSpeed * 2-5, app.playerY - app.playerYSpeed * 2-5, 10, 10, fill=rgb(255, 0, 0), opacity=7, border=rgb(255, 255, 255), borderWidth=1, rotateAngle=app.playerAngle)
+    drawRect(app.playerX - app.playerXSpeed * 1.5-5, app.playerY - app.playerYSpeed * 1.5-5, 10, 10, fill=rgb(255, 0, 0), opacity=8, border=rgb(255, 255, 255), borderWidth=1, rotateAngle=app.playerAngle)
+    drawRect(app.playerX - app.playerXSpeed * 1-5, app.playerY - app.playerYSpeed * 1-5, 10, 10, fill=rgb(255, 0, 0), opacity=9, border=rgb(255, 255, 255), borderWidth=1, rotateAngle=app.playerAngle)
+    drawRect(app.playerX - app.playerXSpeed * 0.5-5, app.playerY - app.playerYSpeed * 0.5-5, 10, 10, fill=rgb(255, 0, 0), opacity=10, border=rgb(255, 255, 255), borderWidth=1)
 
 def redrawAll(app):
     drawRect(0, 0, 750, 750, fill=rgb(0, 5, 20))
     
     for bullet in app.bullets:
-        drawCircle(bullet['x'], bullet['y'], 2, fill=rgb(255, 255, 0))
-        drawCircle(bullet['x'], bullet['y'], 5, fill=rgb(255, 255, 0), opacity=10)
+        drawCircle(bullet['x'], bullet['y'], 2, fill=rgb(255, 200, 0))
+        drawCircle(bullet['x'], bullet['y'], 5, fill=rgb(255, 200, 0), opacity=10)
     
     # Glow trail
-    drawOval(app.playerX - app.playerXSpeed * 3, app.playerY - app.playerYSpeed * 3, 20, 20, fill=rgb(255, 0, 0), opacity=10)
-    drawOval(app.playerX - app.playerXSpeed * 2, app.playerY - app.playerYSpeed * 2, 20, 20, fill=rgb(255, 0, 0), opacity=10)
-    drawOval(app.playerX - app.playerXSpeed * 1, app.playerY - app.playerYSpeed * 1, 20, 20, fill=rgb(255, 0, 0), opacity=10)
+    trail(app)
+    drawRect(app.playerX - app.playerXSpeed * 0.5-5, app.playerY - app.playerYSpeed * 0.5-5, 10, 10, fill=rgb(255, 0, 0), opacity=10, border=rgb(255, 255, 255), borderWidth=1, rotateAngle=app.playerAngle)
     
     # Player
-    drawRect(app.playerX, app.playerY, 10, 10, fill=rgb(255, 0, 0), 
-             border=rgb(255, 255, 255), borderWidth=1, align='center')
+    drawRect(app.playerX, app.playerY, 10, 10, fill=rgb(255, 0, 0), border=rgb(255, 255, 255), borderWidth=1, align='center', rotateAngle=app.playerAngle)
 
 runApp(width=750, height=750)
