@@ -3,6 +3,8 @@ import math
 from cmu_graphics import *
 
 def onAppStart(app):
+    
+    app.recoil = 0.3
     app.stepsPerSecond = 30
     app.playerAngle = 0
     app.playerX = 375
@@ -31,8 +33,8 @@ def onMousePress(app, mouseX, mouseY):
     
     # Add projectile starting at player position
     app.bullets.append({'x': app.playerX,'y': app.playerY,'vx': vx,'vy': vy})
-    app.playerXSpeed -= vx*0.2
-    app.playerYSpeed -= vy*0.2
+    app.playerXSpeed -= vx*app.recoil
+    app.playerYSpeed -= vy*app.recoil
 
 def onMouseMove(app, mouseX, mouseY):
     app.mouseX = mouseX
@@ -60,18 +62,18 @@ def onStep(app):
         bullet['y'] += bullet['vy']
         
     app.bullets = [b for b in app.bullets if 0 <= b['x'] <= 750 and 0 <= b['y'] <= 750]
-    if app.playerX < 25: app.playerX = 25
-    if app.playerX > 725: app.playerX = 725
-    if app.playerY < 25: app.playerY = 25
-    if app.playerY > 725: app.playerY = 725
-    
+    if app.playerX < 0: app.playerX = 750
+    if app.playerX > 750: app.playerX = 0
+    if app.playerY < 0: app.playerY = 750
+    if app.playerY > 750: app.playerY = 0
+
 def trail(app):
     drawRect(app.playerX - app.playerXSpeed * 3-5, app.playerY - app.playerYSpeed * 3-5, 10, 10, fill=rgb(255, 0, 0), opacity=5, border=rgb(255, 255, 255), borderWidth=1, rotateAngle=app.playerAngle)
     drawRect(app.playerX - app.playerXSpeed * 2.5-5, app.playerY - app.playerYSpeed * 2.5-5, 10, 10, fill=rgb(255, 0, 0), opacity=6, border=rgb(255, 255, 255), borderWidth=1, rotateAngle=app.playerAngle)
     drawRect(app.playerX - app.playerXSpeed * 2-5, app.playerY - app.playerYSpeed * 2-5, 10, 10, fill=rgb(255, 0, 0), opacity=7, border=rgb(255, 255, 255), borderWidth=1, rotateAngle=app.playerAngle)
     drawRect(app.playerX - app.playerXSpeed * 1.5-5, app.playerY - app.playerYSpeed * 1.5-5, 10, 10, fill=rgb(255, 0, 0), opacity=8, border=rgb(255, 255, 255), borderWidth=1, rotateAngle=app.playerAngle)
     drawRect(app.playerX - app.playerXSpeed * 1-5, app.playerY - app.playerYSpeed * 1-5, 10, 10, fill=rgb(255, 0, 0), opacity=9, border=rgb(255, 255, 255), borderWidth=1, rotateAngle=app.playerAngle)
-    drawRect(app.playerX - app.playerXSpeed * 0.5-5, app.playerY - app.playerYSpeed * 0.5-5, 10, 10, fill=rgb(255, 0, 0), opacity=10, border=rgb(255, 255, 255), borderWidth=1)
+    drawRect(app.playerX - app.playerXSpeed * 0.5-5, app.playerY - app.playerYSpeed * 0.5-5, 10, 10, fill=rgb(255, 0, 0), opacity=10, border=rgb(255, 255, 255), borderWidth=1, rotateAngle=app.playerAngle)
 
 def redrawAll(app):
     drawRect(0, 0, 750, 750, fill=rgb(0, 5, 20))
