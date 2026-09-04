@@ -6,15 +6,16 @@ import math
 from cmu_graphics import *
 
 def onAppStart(app):
+
+    app.stepsPerSecond = 120
     
     app.recoil = 0.5
-    app.stepsPerSecond = 30
     app.playerAngle = 0
     app.playerX = 375
     app.playerY = 375
     app.playerXSpeed = 0
     app.playerYSpeed = 0
-    app.accel = 0.75
+    app.accel = 0.25
     app.drag = 0.99
     
     app.mouseX = 375
