@@ -68,7 +68,7 @@ def onStep(app):
 
     if app.reloading:
         app.magI = rgb(255,255,0)
-        print(app.reload)
+        #print(app.reload)
         app.reload += 1
         if app.reload >= app.reloadSpeed:
             app.mag=6
@@ -131,7 +131,7 @@ def redrawAll(app):
     drawRect(10,10,app.maxHp*2+4,24,fill=rgb(255,255,255))
     drawRect(12,12,app.hp*2,20,fill='lime')
     #mag
-    drawRect(10,36,app.maxMag*20+4,24,fill=app.magI)
-    drawRect(12,38,app.mag*20,20,fill='teal')
+    drawRect(10,44,app.maxMag*20+4,24,fill=app.magI)
+    drawRect(12,46,app.mag*20,20,fill='teal')
 
 runApp(width=750, height=750)
