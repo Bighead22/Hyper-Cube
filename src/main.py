@@ -8,7 +8,12 @@ from cmu_graphics import *
 def onAppStart(app):
 
     app.stepsPerSecond = 120
-    
+
+    app.reload = 0
+    app.reloadSpeed = 100
+    app.reloading = False
+    app.magI = rgb(255,255,255)
+
     app.recoil = 0.5
     app.playerAngle = 0
     app.playerX = 375
@@ -17,6 +22,11 @@ def onAppStart(app):
     app.playerYSpeed = 0
     app.accel = 0.25
     app.drag = 0.99
+
+    app.maxHp = 100
+    app.hp = 100
+    app.mag = 6
+    app.maxMag = 6
     
     app.mouseX = 375
     app.mouseY = 375
@@ -27,24 +37,44 @@ def onAppStart(app):
 
 def onMousePress(app, mouseX, mouseY):
     
-    dx = mouseX - app.playerX
-    dy = mouseY - app.playerY
-    angle = math.atan2(dy, dx)
+    if app.mag != 0.05:
+        dx = mouseX - app.playerX
+        dy = mouseY - app.playerY
+        angle = math.atan2(dy, dx)
+        
+        vx = math.cos(angle) * app.bulletSpeed
+        vy = math.sin(angle) * app.bulletSpeed
+        
+        app.bullets.append({'x': app.playerX,'y': app.playerY,'vx': vx,'vy': vy})
+        app.playerXSpeed -= vx*app.recoil
+        app.playerYSpeed -= vy*app.recoil
+
+    if app.mag > 1:
+        app.mag-=1
+    if app.mag == 1:
+        app.mag = 0.05
+
+def onKeyPress(app, key):
+    if key == 'r':
+        app.reloading = True
     
-    
-    vx = math.cos(angle) * app.bulletSpeed
-    vy = math.sin(angle) * app.bulletSpeed
-    
-    
-    app.bullets.append({'x': app.playerX,'y': app.playerY,'vx': vx,'vy': vy})
-    app.playerXSpeed -= vx*app.recoil
-    app.playerYSpeed -= vy*app.recoil
+
 
 def onMouseMove(app, mouseX, mouseY):
     app.mouseX = mouseX
     app.mouseY = mouseY
     
 def onStep(app):
+
+    if app.reloading:
+        app.magI = rgb(255,255,0)
+        print(app.reload)
+        app.reload += 1
+        if app.reload >= app.reloadSpeed:
+            app.mag=6
+            app.reloading = False
+            app.reload = 0
+            app.magI = rgb(255,255,255)
 
     dx = app.mouseX - app.playerX
     dy = app.mouseY - app.playerY
@@ -97,5 +127,11 @@ def redrawAll(app):
     
     # Player
     drawRect(app.playerX, app.playerY, 10, 10, fill=rgb(255, 0, 0), border=rgb(255, 255, 255), borderWidth=1, align='center', rotateAngle=app.playerAngle)
+    #health
+    drawRect(10,10,app.maxHp*2+4,24,fill=rgb(255,255,255))
+    drawRect(12,12,app.hp*2,20,fill='lime')
+    #mag
+    drawRect(10,36,app.maxMag*20+4,24,fill=app.magI)
+    drawRect(12,38,app.mag*20,20,fill='teal')
 
 runApp(width=750, height=750)
