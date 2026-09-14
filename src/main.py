@@ -7,7 +7,7 @@ from cmu_graphics import *
 
 def onAppStart(app):
 
-    app.stepsPerSecond = 120
+    app.stepsPerSecond = 60
 
     app.reload = 0
     app.reloadSpeed = 100
@@ -20,7 +20,7 @@ def onAppStart(app):
     app.playerY = 375
     app.playerXSpeed = 0
     app.playerYSpeed = 0
-    app.accel = 0.25
+    app.accel = 0.5
     app.drag = 0.99
 
     app.maxHp = 100
@@ -30,7 +30,15 @@ def onAppStart(app):
     
     app.mouseX = 375
     app.mouseY = 375
-    
+
+    app.enemyX = 100
+    app.enemyY = 100
+    app.ehp = 100
+    app.enemyXSpeed = 0
+    app.enemyYSpeed = 0
+    app.eAccel = 0.6
+    app.enemyAngle = 0
+    app.eDrag = 0.99
     
     app.bullets = []
     app.bulletSpeed = 15
@@ -63,13 +71,26 @@ def onKeyPress(app, key):
 def onMouseMove(app, mouseX, mouseY):
     app.mouseX = mouseX
     app.mouseY = mouseY
+
+def screenWraping(app):
+    if app.playerX < 0: app.playerX = 750
+    if app.playerX > 750: app.playerX = 0
+    if app.playerY < 0: app.playerY = 750
+    if app.playerY > 750: app.playerY = 0
+
+    if app.enemyX < 0: app.enemyX = 750
+    if app.enemyX > 750: app.enemyX = 0
+    if app.enemyY < 0: app.enemyX = 750
+    if app.enemyY > 750: app.enemyX = 0
     
 def onStep(app):
 
     if app.reloading:
-        app.magI = rgb(255,255,0)
+        app.magI = None
         #print(app.reload)
         app.reload += 1
+        if app.reload % 2 == 0:
+            app.magI = rgb(255,255,255)
         if app.reload >= app.reloadSpeed:
             app.mag=6
             app.reloading = False
@@ -91,23 +112,48 @@ def onStep(app):
     app.playerXSpeed *= app.drag
     app.playerYSpeed *= app.drag
 
+    #Enemy logic
+
+    ex = app.playerX - app.enemyX
+    ey = app.playerY - app.enemyY
+    
+    eAngle = math.atan2(ey, ex)
+    app.enemyXSpeed += math.cos(eAngle) * app.eAccel
+    app.enemyYSpeed += math.sin(eAngle) * app.eAccel
+
+    app.enemyAngle = math.degrees(math.atan2(ey, ex))
+    app.enemyX += app.enemyXSpeed
+    app.enemyY += app.enemyYSpeed
+    app.enemyXSpeed *= app.drag
+    app.enemyYSpeed *= app.drag
+
     for bullet in app.bullets:
         bullet['x'] += bullet['vx']
         bullet['y'] += bullet['vy']
         
     app.bullets = [b for b in app.bullets if 0 <= b['x'] <= 750 and 0 <= b['y'] <= 750]
-    if app.playerX < 0: app.playerX = 750
-    if app.playerX > 750: app.playerX = 0
-    if app.playerY < 0: app.playerY = 750
-    if app.playerY > 750: app.playerY = 0
+    screenWraping(app)
+
 
 def trail(app):
+    #p trail
     drawRect(app.playerX - app.playerXSpeed * 3-5, app.playerY - app.playerYSpeed * 3-5, 10, 10, fill=rgb(255, 0, 0), opacity=5, border=rgb(255, 255, 255), borderWidth=1, rotateAngle=app.playerAngle)
     drawRect(app.playerX - app.playerXSpeed * 2.5-5, app.playerY - app.playerYSpeed * 2.5-5, 10, 10, fill=rgb(255, 0, 0), opacity=6, border=rgb(255, 255, 255), borderWidth=1, rotateAngle=app.playerAngle)
     drawRect(app.playerX - app.playerXSpeed * 2-5, app.playerY - app.playerYSpeed * 2-5, 10, 10, fill=rgb(255, 0, 0), opacity=7, border=rgb(255, 255, 255), borderWidth=1, rotateAngle=app.playerAngle)
     drawRect(app.playerX - app.playerXSpeed * 1.5-5, app.playerY - app.playerYSpeed * 1.5-5, 10, 10, fill=rgb(255, 0, 0), opacity=8, border=rgb(255, 255, 255), borderWidth=1, rotateAngle=app.playerAngle)
     drawRect(app.playerX - app.playerXSpeed * 1-5, app.playerY - app.playerYSpeed * 1-5, 10, 10, fill=rgb(255, 0, 0), opacity=9, border=rgb(255, 255, 255), borderWidth=1, rotateAngle=app.playerAngle)
     drawRect(app.playerX - app.playerXSpeed * 0.5-5, app.playerY - app.playerYSpeed * 0.5-5, 10, 10, fill=rgb(255, 0, 0), opacity=10, border=rgb(255, 255, 255), borderWidth=1, rotateAngle=app.playerAngle)
+
+    #e trail
+    drawStar(app.enemyX - app.enemyXSpeed * 3,app.enemyY - app.enemyYSpeed * 3, 10,3,fill=rgb(255, 255, 0),opacity = 5, border=rgb(255, 255, 255), borderWidth=1,roundness = 50, rotateAngle=app.enemyAngle-90)
+    drawStar(app.enemyX - app.enemyXSpeed * 2.5,app.enemyY - app.enemyYSpeed * 2.5, 10,3,fill=rgb(255, 255, 0),opacity = 6, border=rgb(255, 255, 255), borderWidth=1,roundness = 50, rotateAngle=app.enemyAngle-90)
+    drawStar(app.enemyX - app.enemyXSpeed * 2,app.enemyY - app.enemyYSpeed * 2, 10,3,fill=rgb(255, 255, 0),opacity = 7, border=rgb(255, 255, 255), borderWidth=1,roundness = 50, rotateAngle=app.enemyAngle-90)
+    drawStar(app.enemyX - app.enemyXSpeed * 1.5,app.enemyY - app.enemyYSpeed * 1.5, 10,3,fill=rgb(255, 255, 0),opacity = 8, border=rgb(255, 255, 255), borderWidth=1,roundness = 50, rotateAngle=app.enemyAngle-90)
+    drawStar(app.enemyX - app.enemyXSpeed * 1,app.enemyY - app.enemyYSpeed * 1.5, 10,3,fill=rgb(255, 255, 0),opacity = 9, border=rgb(255, 255, 255), borderWidth=1,roundness = 50, rotateAngle=app.enemyAngle-90)
+    drawStar(app.enemyX - app.enemyXSpeed * 0.5,app.enemyY - app.enemyYSpeed * 0.5, 10,3,fill=rgb(255, 255, 0),opacity = 10, border=rgb(255, 255, 255), borderWidth=1,roundness = 50, rotateAngle=app.enemyAngle-90)
+        
+    
+
 
 def redrawAll(app):
     drawRect(0, 0, 750, 750, fill=rgb(0, 5, 20))
@@ -127,6 +173,9 @@ def redrawAll(app):
     
     # Player
     drawRect(app.playerX, app.playerY, 10, 10, fill=rgb(255, 0, 0), border=rgb(255, 255, 255), borderWidth=1, align='center', rotateAngle=app.playerAngle)
+    #Enemy
+    drawStar(app.enemyX,app.enemyY, 10,3,fill=rgb(255, 255, 0), border=rgb(255, 255, 255), borderWidth=1,roundness = 50, rotateAngle=app.enemyAngle-90)
+    drawRect(app.enemyX,app.enemyY + 15, app.ehp*0.2, 3, fill = rgb(0,255,0,), align='center') 
     #health
     drawRect(10,10,app.maxHp*2+4,24,fill=rgb(255,255,255))
     drawRect(12,12,app.hp*2,20,fill='lime')
