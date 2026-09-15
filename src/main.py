@@ -14,7 +14,7 @@ def onAppStart(app):
     app.reloading = False
     app.magI = rgb(255,255,255)
 
-    app.recoil = 0.5
+    app.recoil = 0.25
     app.playerAngle = 0
     app.playerX = 375
     app.playerY = 375
@@ -41,7 +41,12 @@ def onAppStart(app):
     app.eDrag = 0.99
     
     app.bullets = []
-    app.bulletSpeed = 15
+    app.bulletSpeed = 30
+
+def isColiding(app, c1x, c1y, c2x, c2y):
+    if (c2x - 10 <= c1x <= c2x + 30) and (c2y - 10 <= c1y <= c2y + 30):
+        return True
+    return False
 
 def onMousePress(app, mouseX, mouseY):
     
@@ -73,15 +78,15 @@ def onMouseMove(app, mouseX, mouseY):
     app.mouseY = mouseY
 
 def screenWraping(app):
-    if app.playerX < 0: app.playerX = 750
-    if app.playerX > 750: app.playerX = 0
-    if app.playerY < 0: app.playerY = 750
-    if app.playerY > 750: app.playerY = 0
+    if app.playerX < 0: app.playerX = 1000
+    if app.playerX > 1000: app.playerX = 0
+    if app.playerY < 0: app.playerY = 1000
+    if app.playerY > 1000: app.playerY = 0
 
-    if app.enemyX < 0: app.enemyX = 750
-    if app.enemyX > 750: app.enemyX = 0
-    if app.enemyY < 0: app.enemyX = 750
-    if app.enemyY > 750: app.enemyX = 0
+    if app.enemyX < 0: app.enemyX = 1000
+    if app.enemyX > 1000: app.enemyX = 0
+    if app.enemyY < 0: app.enemyX = 1000
+    if app.enemyY > 1000: app.enemyX = 0
     
 def onStep(app):
 
@@ -114,8 +119,8 @@ def onStep(app):
 
     #Enemy logic
 
-    ex = app.playerX - app.enemyX
-    ey = app.playerY - app.enemyY
+    ex = (app.playerX + app.playerXSpeed*2)- app.enemyX
+    ey = (app.playerY + app.playerYSpeed*2) - app.enemyY
     
     eAngle = math.atan2(ey, ex)
     app.enemyXSpeed += math.cos(eAngle) * app.eAccel
@@ -131,8 +136,14 @@ def onStep(app):
         bullet['x'] += bullet['vx']
         bullet['y'] += bullet['vy']
         
-    app.bullets = [b for b in app.bullets if 0 <= b['x'] <= 750 and 0 <= b['y'] <= 750]
+    app.bullets = [b for b in app.bullets if 0 <= b['x'] <= 1000 and 0 <= b['y'] <= 1000]
     screenWraping(app)
+    if isColiding(app, app.playerX, app.playerY, app.enemyX, app.enemyY):
+        print('colide')
+        app.playerXSpeed += app.enemyXSpeed
+        app.playerYSpeed += app.enemyYSpeed
+        app.enemyXSpeed -= app.playerXSpeed*0.75
+        app.enemyYSpeed -= app.playerYSpeed*0.75
 
 
 def trail(app):
@@ -156,7 +167,7 @@ def trail(app):
 
 
 def redrawAll(app):
-    drawRect(0, 0, 750, 750, fill=rgb(0, 5, 20))
+    drawRect(0, 0, 1000, 1000, fill=rgb(0, 5, 20))
     
     for bullet in app.bullets:
         drawCircle(bullet['x'], bullet['y'], 2, fill=rgb(0, 200, 200),border=rgb(255, 255, 255), borderWidth=1)
@@ -174,7 +185,7 @@ def redrawAll(app):
     # Player
     drawRect(app.playerX, app.playerY, 10, 10, fill=rgb(255, 0, 0), border=rgb(255, 255, 255), borderWidth=1, align='center', rotateAngle=app.playerAngle)
     #Enemy
-    drawStar(app.enemyX,app.enemyY, 10,3,fill=rgb(255, 255, 0), border=rgb(255, 255, 255), borderWidth=1,roundness = 50, rotateAngle=app.enemyAngle-90)
+    drawStar(app.enemyX,app.enemyY, 20,3,fill=rgb(255, 255, 0), border=rgb(255, 255, 255), borderWidth=1,roundness = 50, rotateAngle=app.enemyAngle-90)
     drawRect(app.enemyX,app.enemyY + 15, app.ehp*0.2, 3, fill = rgb(0,255,0,), align='center') 
     #health
     drawRect(10,10,app.maxHp*2+4,24,fill=rgb(255,255,255))
@@ -183,4 +194,4 @@ def redrawAll(app):
     drawRect(10,44,app.maxMag*20+4,24,fill=app.magI)
     drawRect(12,46,app.mag*20,20,fill='teal')
 
-runApp(width=750, height=750)
+runApp(width=1000, height=1000)
