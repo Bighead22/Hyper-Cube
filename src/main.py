@@ -4,17 +4,15 @@
 
 import math
 from cmu_graphics import *
+app.setMaxShapeCount(160000)
 
 def onAppStart(app):
 
     app.stepsPerSecond = 60
+    
+    app.mouseX = 375
+    app.mouseY = 375
 
-    app.reload = 0
-    app.reloadSpeed = 100
-    app.reloading = False
-    app.magI = rgb(255,255,255)
-
-    app.recoil = 0.25
     app.playerAngle = 0
     app.playerX = 375
     app.playerY = 375
@@ -25,26 +23,35 @@ def onAppStart(app):
 
     app.maxHp = 100
     app.hp = 100
-    app.mag = 6
-    app.maxMag = 6
+    app.mag = 12
+    app.maxMag = 12
+    app.hpRegen = 3000 # lower number for faster regen higher number for slower regen
     
-    app.mouseX = 375
-    app.mouseY = 375
-
-    app.enemyX = 100
-    app.enemyY = 100
+    app.recoilResitance = 1 # get closer to 0 for less recoil higer number for more
+    app.bulletSize = 3
+    app.recoil = app.bulletSize/9
+    app.bulletCount = 1
+    app.bullets = []
+    app.bulletDamage = 20
+    app.bulletSpeed = 30
+    app.reload = 0
+    app.reloadSpeed = 100
+    app.reloading = False
+    app.magI = rgb(255,255,255)
+    
+    app.enemyX = 1
+    app.enemyY = 1
     app.ehp = 100
     app.enemyXSpeed = 0
     app.enemyYSpeed = 0
-    app.eAccel = 0.6
+    app.eAccel = 0.75
     app.enemyAngle = 0
     app.eDrag = 0.99
     
-    app.bullets = []
-    app.bulletSpeed = 30
+    app.gameOverL = ''
 
-def isColiding(app, c1x, c1y, c2x, c2y):
-    if (c2x - 10 <= c1x <= c2x + 30) and (c2y - 10 <= c1y <= c2y + 30):
+def isColiding(app, c1x, c1y, c2x, c2y, hitboxSize):
+    if (c2x - hitboxSize <= c1x <= c2x + hitboxSize*2) and (c2y - hitboxSize <= c1y <= c2y + hitboxSize*2):
         return True
     return False
 
@@ -53,14 +60,25 @@ def onMousePress(app, mouseX, mouseY):
     if app.mag != 0.05:
         dx = mouseX - app.playerX
         dy = mouseY - app.playerY
-        angle = math.atan2(dy, dx)
+        baseAngle = math.atan2(dy, dx)
         
-        vx = math.cos(angle) * app.bulletSpeed
-        vy = math.sin(angle) * app.bulletSpeed
+        spreadAngle = math.radians(5*app.bulletCount)
         
-        app.bullets.append({'x': app.playerX,'y': app.playerY,'vx': vx,'vy': vy})
-        app.playerXSpeed -= vx*app.recoil
-        app.playerYSpeed -= vy*app.recoil
+        if app.bulletCount > 1:
+            angleStep = spreadAngle / (app.bulletCount - 1)
+            startAngle = baseAngle - (spreadAngle / 2)
+        else:
+            angleStep = 0
+            startAngle = baseAngle
+
+        for i in range(app.bulletCount):
+            angle = startAngle + (i * angleStep)
+            vx = math.cos(angle) * app.bulletSpeed
+            vy = math.sin(angle) * app.bulletSpeed
+            app.bullets.append({'x': app.playerX, 'y': app.playerY, 'vx': vx, 'vy': vy})
+            app.playerXSpeed -= (vx * app.recoil) * app.recoilResitance
+            app.playerYSpeed -= (vy * app.recoil) * app.recoilResitance
+            i += 1
 
     if app.mag > 1:
         app.mag-=1
@@ -89,15 +107,18 @@ def screenWraping(app):
     if app.enemyY > 1000: app.enemyX = 0
     
 def onStep(app):
+    
+    app.hp += app.maxHp/app.hpRegen
+    if app.hp > app.maxHp:
+        app.hp = app.maxHp
 
     if app.reloading:
         app.magI = None
-        #print(app.reload)
         app.reload += 1
         if app.reload % 2 == 0:
             app.magI = rgb(255,255,255)
         if app.reload >= app.reloadSpeed:
-            app.mag=6
+            app.mag = app.maxMag
             app.reloading = False
             app.reload = 0
             app.magI = rgb(255,255,255)
@@ -119,9 +140,9 @@ def onStep(app):
 
     #Enemy logic
 
-    ex = (app.playerX + app.playerXSpeed*2)- app.enemyX
-    ey = (app.playerY + app.playerYSpeed*2) - app.enemyY
-    
+    ex = ((app.playerX + app.mouseX)/2) - app.enemyX
+    ey = ((app.playerY + app.mouseY)/2) - app.enemyY
+
     eAngle = math.atan2(ey, ex)
     app.enemyXSpeed += math.cos(eAngle) * app.eAccel
     app.enemyYSpeed += math.sin(eAngle) * app.eAccel
@@ -135,15 +156,35 @@ def onStep(app):
     for bullet in app.bullets:
         bullet['x'] += bullet['vx']
         bullet['y'] += bullet['vy']
+        if isColiding(app, bullet['x'], bullet['y'], app.enemyX, app.enemyY, app.bulletSize + 10):
+            app.ehp -= app.bulletDamage
+            app.enemyXSpeed += bullet['vx']*app.recoil
+            app.enemyYSpeed += bullet['vy']*app.recoil
+            app.bullets.remove(bullet)
+            if app.ehp <= 0:
+                app.ehp = 100
+                app.enemyX = 100
+                app.enemyY = 100
+                app.enemyXSpeed = 0
+                app.enemyYSpeed = 0
         
     app.bullets = [b for b in app.bullets if 0 <= b['x'] <= 1000 and 0 <= b['y'] <= 1000]
     screenWraping(app)
-    if isColiding(app, app.playerX, app.playerY, app.enemyX, app.enemyY):
+    if isColiding(app, app.playerX, app.playerY, app.enemyX, app.enemyY, 20):
         print('colide')
         app.playerXSpeed += app.enemyXSpeed
         app.playerYSpeed += app.enemyYSpeed
         app.enemyXSpeed -= app.playerXSpeed*0.75
         app.enemyYSpeed -= app.playerYSpeed*0.75
+        temp = app.hp - math.hypot(math.hypot(app.enemyXSpeed,app.playerXSpeed), math.hypot(app.enemyYSpeed,app.playerYSpeed))/2
+        if temp > 0:
+            app.hp -= math.hypot(math.hypot(app.enemyXSpeed,app.playerXSpeed), math.hypot(app.enemyYSpeed,app.playerYSpeed))/2
+        else :
+            app.hp = 0.01
+    
+    if app.hp == 0.01:
+        app.gameOverL = 'You lost the game'
+        app.stop()
 
 
 def trail(app):
@@ -156,12 +197,12 @@ def trail(app):
     drawRect(app.playerX - app.playerXSpeed * 0.5-5, app.playerY - app.playerYSpeed * 0.5-5, 10, 10, fill=rgb(255, 0, 0), opacity=10, border=rgb(255, 255, 255), borderWidth=1, rotateAngle=app.playerAngle)
 
     #e trail
-    drawStar(app.enemyX - app.enemyXSpeed * 3,app.enemyY - app.enemyYSpeed * 3, 10,3,fill=rgb(255, 255, 0),opacity = 5, border=rgb(255, 255, 255), borderWidth=1,roundness = 50, rotateAngle=app.enemyAngle-90)
-    drawStar(app.enemyX - app.enemyXSpeed * 2.5,app.enemyY - app.enemyYSpeed * 2.5, 10,3,fill=rgb(255, 255, 0),opacity = 6, border=rgb(255, 255, 255), borderWidth=1,roundness = 50, rotateAngle=app.enemyAngle-90)
-    drawStar(app.enemyX - app.enemyXSpeed * 2,app.enemyY - app.enemyYSpeed * 2, 10,3,fill=rgb(255, 255, 0),opacity = 7, border=rgb(255, 255, 255), borderWidth=1,roundness = 50, rotateAngle=app.enemyAngle-90)
-    drawStar(app.enemyX - app.enemyXSpeed * 1.5,app.enemyY - app.enemyYSpeed * 1.5, 10,3,fill=rgb(255, 255, 0),opacity = 8, border=rgb(255, 255, 255), borderWidth=1,roundness = 50, rotateAngle=app.enemyAngle-90)
-    drawStar(app.enemyX - app.enemyXSpeed * 1,app.enemyY - app.enemyYSpeed * 1.5, 10,3,fill=rgb(255, 255, 0),opacity = 9, border=rgb(255, 255, 255), borderWidth=1,roundness = 50, rotateAngle=app.enemyAngle-90)
-    drawStar(app.enemyX - app.enemyXSpeed * 0.5,app.enemyY - app.enemyYSpeed * 0.5, 10,3,fill=rgb(255, 255, 0),opacity = 10, border=rgb(255, 255, 255), borderWidth=1,roundness = 50, rotateAngle=app.enemyAngle-90)
+    drawStar(app.enemyX - app.enemyXSpeed * 3,app.enemyY - app.enemyYSpeed * 3, 20,3,fill=rgb(255, 255, 0),opacity = 5, border=rgb(255, 255, 255), borderWidth=1,roundness = 50, rotateAngle=app.enemyAngle-90)
+    drawStar(app.enemyX - app.enemyXSpeed * 2.5,app.enemyY - app.enemyYSpeed * 2.5, 20,3,fill=rgb(255, 255, 0),opacity = 6, border=rgb(255, 255, 255), borderWidth=1,roundness = 50, rotateAngle=app.enemyAngle-90)
+    drawStar(app.enemyX - app.enemyXSpeed * 2,app.enemyY - app.enemyYSpeed * 2, 20,3,fill=rgb(255, 255, 0),opacity = 7, border=rgb(255, 255, 255), borderWidth=1,roundness = 50, rotateAngle=app.enemyAngle-90)
+    drawStar(app.enemyX - app.enemyXSpeed * 1.5,app.enemyY - app.enemyYSpeed * 1.5, 20,3,fill=rgb(255, 255, 0),opacity = 8, border=rgb(255, 255, 255), borderWidth=1,roundness = 50, rotateAngle=app.enemyAngle-90)
+    drawStar(app.enemyX - app.enemyXSpeed * 1,app.enemyY - app.enemyYSpeed * 1.5, 20,3,fill=rgb(255, 255, 0),opacity = 9, border=rgb(255, 255, 255), borderWidth=1,roundness = 50, rotateAngle=app.enemyAngle-90)
+    drawStar(app.enemyX - app.enemyXSpeed * 0.5,app.enemyY - app.enemyYSpeed * 0.5, 20,3,fill=rgb(255, 255, 0),opacity = 10, border=rgb(255, 255, 255), borderWidth=1,roundness = 50, rotateAngle=app.enemyAngle-90)
         
     
 
@@ -170,13 +211,13 @@ def redrawAll(app):
     drawRect(0, 0, 1000, 1000, fill=rgb(0, 5, 20))
     
     for bullet in app.bullets:
-        drawCircle(bullet['x'], bullet['y'], 2, fill=rgb(0, 200, 200),border=rgb(255, 255, 255), borderWidth=1)
+        drawCircle(bullet['x'], bullet['y'], app.bulletSize, fill=rgb(0, 200, 200),border=rgb(255, 255, 255), borderWidth=1)
         
         #bullet trail
-        drawCircle(bullet['x'], bullet['y'], 5, fill=rgb(0, 255, 255), opacity=10)
-        drawCircle(bullet['x']-bullet['vx']*0.2, bullet['y']-bullet['vy']*0.2, 4, fill=rgb(0, 255, 255), opacity=8)
-        drawCircle(bullet['x']-bullet['vx']*0.4, bullet['y']-bullet['vy']*0.4, 3, fill=rgb(0, 255, 255), opacity=6)
-        drawCircle(bullet['x']-bullet['vx']*0.6, bullet['y']-bullet['vy']*0.6, 2, fill=rgb(0, 255, 255), opacity=4)
+        drawCircle(bullet['x'], bullet['y'], app.bulletSize + 3, fill=rgb(0, 255, 255), opacity=10)
+        drawCircle(bullet['x']-bullet['vx']*0.2, bullet['y']-bullet['vy']*0.2, app.bulletSize + 2, fill=rgb(0, 255, 255), opacity=8)
+        drawCircle(bullet['x']-bullet['vx']*0.4, bullet['y']-bullet['vy']*0.4, app.bulletSize + 1, fill=rgb(0, 255, 255), opacity=6)
+        drawCircle(bullet['x']-bullet['vx']*0.6, bullet['y']-bullet['vy']*0.6, app.bulletSize, fill=rgb(0, 255, 255), opacity=4)
     
     # Glow trail
     trail(app)
@@ -191,7 +232,9 @@ def redrawAll(app):
     drawRect(10,10,app.maxHp*2+4,24,fill=rgb(255,255,255))
     drawRect(12,12,app.hp*2,20,fill='lime')
     #mag
-    drawRect(10,44,app.maxMag*20+4,24,fill=app.magI)
-    drawRect(12,46,app.mag*20,20,fill='teal')
+    drawRect(10,44,app.maxMag*10+4,24,fill=app.magI)
+    drawRect(12,46,app.mag*10,20,fill='teal')
+    #game over
+    drawLabel(app.gameOverL, 500, 500, size=50, fill=rgb(255,0,0), bold=True,border=rgb(255,255,255), borderWidth=1)
 
 runApp(width=1000, height=1000)
