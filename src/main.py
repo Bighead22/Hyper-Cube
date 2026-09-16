@@ -109,8 +109,7 @@ def screenWraping(app):
     
 def onStep(app):
     while len(app.enemies) < app.enemyCount:
-        app.enemies.append({
-            'x': 100,'y': 100,'hp': 100,'vx': 0,'vy': 0,'angle': 0,'size': 10})
+        app.enemies.append({'x': 100,'y': 100,'hp': 100,'vx': 0,'vy': 0,'angle': 0,'size': 10})
     
     app.enemyCountCD += 1
     if app.enemyCountCD % app.enemyspawnCD == 0:
@@ -177,10 +176,10 @@ def onStep(app):
                 hit = True
                 
                 # Enemy death/respawn
-                if enemy['hp'] <= 0:
-                    enemy['hp'] = 100
-                    enemy['x'] = 100
-                    enemy['y'] = 100
+                if enemy['hp'] <= 1:
+                    enemy['hp'] = 0.5
+                    enemy['x'] = 1000
+                    enemy['y'] = 1000
                     enemy['vx'] = 0
                     enemy['vy'] = 0
                 break # Bullet disappears after hitting one enemy
