@@ -6,7 +6,9 @@ from cmu_graphics import *
 app.setMaxShapeCount(160000)
 
 def onAppStart(app):
+
     app.stepsPerSecond = 60
+    app.score = 0
     
     app.mouseX = 375
     app.mouseY = 375
@@ -108,6 +110,7 @@ def screenWraping(app):
         if enemy['y'] > 1000: enemy['y'] = 0
     
 def onStep(app):
+    app.score += 1/30
     while len(app.enemies) < app.enemyCount:
         app.enemies.append({'x': 100,'y': 100,'hp': 100,'vx': 0,'vy': 0,'angle': 0,'size': 10})
     
@@ -179,6 +182,7 @@ def onStep(app):
                 if enemy['hp'] <= 0:
                     app.enemies.remove(enemy)
                     app.enemyCount -= 1
+                    app.score += 10
                 break # Bullet disappears after hitting one enemy
                 
         if not hit and 0 <= bullet['x'] <= 1000 and 0 <= bullet['y'] <= 1000:
@@ -277,6 +281,6 @@ def redrawAll(app):
     
     # Game over
     if app.gameOverL:
-        drawLabel(app.gameOverL, 500, 500, size=50, fill=rgb(255, 0, 0), bold=True, border=rgb(255, 255, 255), borderWidth=1)
+        drawLabel(app.score, 500, 500, size=50, fill=rgb(255, 0, 0), bold=True, border=rgb(255, 255, 255), borderWidth=1)
 
 runApp(width=1000, height=1000)
