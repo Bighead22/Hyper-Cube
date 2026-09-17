@@ -30,7 +30,7 @@ def onAppStart(app):
     app.bulletSize = 3
     app.recoil = app.bulletSize/9
     app.bulletCount = 1
-    app.bulletDamage = 20
+    app.bulletDamage = 10
     app.bulletSpeed = 30
     app.reload = 0
     app.reloadSpeed = 100
@@ -39,7 +39,7 @@ def onAppStart(app):
     
     # Enemy Setup
     app.enemies = []
-    app.enemyspawnCD = 1000 # lower number for faster spawn higher number for slower spawn
+    app.enemyspawnCD = (10)*30 # lower number for faster spawn higher number for slower spawn chang number in ()
     app.enemyCountCD = 1
     app.enemyCount = 1 # Change this to add more enemies
     app.eAccel = 0.75
@@ -176,12 +176,9 @@ def onStep(app):
                 hit = True
                 
                 # Enemy death/respawn
-                if enemy['hp'] <= 1:
-                    enemy['hp'] = 0.5
-                    enemy['x'] = 1000
-                    enemy['y'] = 1000
-                    enemy['vx'] = 0
-                    enemy['vy'] = 0
+                if enemy['hp'] <= 0:
+                    app.enemies.remove(enemy)
+                    app.enemyCount -= 1
                 break # Bullet disappears after hitting one enemy
                 
         if not hit and 0 <= bullet['x'] <= 1000 and 0 <= bullet['y'] <= 1000:
