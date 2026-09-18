@@ -1,15 +1,17 @@
 #python src/main.py
 #pip install cmu-graphics
 
-import math
 from cmu_graphics import *
+import math
+import random
+
 app.setMaxShapeCount(160000)
 
 def onAppStart(app):
 
     app.stepsPerSecond = 60
     app.score = 0
-    
+
     app.mouseX = 375
     app.mouseY = 375
 
@@ -46,10 +48,11 @@ def onAppStart(app):
     app.enemyCount = 1 # Change this to add more enemies
     app.eAccel = 0.75
     app.eDrag = 0.99
+    app.enemyType = 1
     
     # Spawn the enemies
     for i in range(app.enemyCount):
-        app.enemies.append({'x': 100 * (i + 1),'y': 100,'hp': 100,'vx': 0,'vy': 0,'angle': 0,'size': 10})
+        app.enemies.append({'x': 100 * (i + 1),'y': 100,'hp': 100,'vx': 0,'vy': 0,'angle': 0,'size': 10, 'type' : random.randint(1,2)})
     
     app.gameOverL = ''
 
@@ -110,10 +113,11 @@ def screenWraping(app):
         if enemy['y'] > 1000: enemy['y'] = 0
     
 def onStep(app):
+    #app.enemyType = random.randint(0, 1)
     app.score += 1/30
     while len(app.enemies) < app.enemyCount:
-        app.enemies.append({'x': 100,'y': 100,'hp': 100,'vx': 0,'vy': 0,'angle': 0,'size': 10})
-    
+        app.enemies.append({'x': 100,'y': 100,'hp': 100,'vx': 0,'vy': 0,'angle': 0,'size': 10, 'type' : random.randint(1,2)})
+
     app.enemyCountCD += 1
     if app.enemyCountCD % app.enemyspawnCD == 0:
         app.enemyCount += 1
@@ -268,9 +272,13 @@ def redrawAll(app):
     
     # Enemies
     for enemy in app.enemies:
-        drawStar(enemy['x'], enemy['y'], 20, 3, fill=rgb(255, 255, 0), border=rgb(255, 255, 255), borderWidth=1, roundness=50, rotateAngle=enemy['angle']-90)
-        # Enemy health bar
-        drawRect(enemy['x'], enemy['y'] + 15, enemy['hp']*0.2, 3, fill=rgb(0, 255, 0), align='center') 
+        if enemy['type'] == 1:
+            drawStar(enemy['x'], enemy['y'], 20, 3, fill=rgb(255, 255, 0), border=rgb(255, 255, 255), borderWidth=1, roundness=50, rotateAngle=enemy['angle']-90)
+            drawRect(enemy['x'], enemy['y'] + 20, enemy['hp']*0.2, 3, fill=rgb(0, 255, 0), align='center')
+        if enemy['type'] == 2:
+            drawRegularPolygon(enemy['x'], enemy['y'], 15, 6, fill=rgb(255, 0, 255), border=rgb(255, 255, 255), borderWidth=1, rotateAngle=enemy['angle']-90)
+            drawRect(enemy['x'], enemy['y'] + 20, enemy['hp']*0.2, 3, fill=rgb(0, 255, 0), align='center')
+
         
     # UI: Health
     drawRect(10, 10, app.maxHp*2+4, 24, fill=rgb(255, 255, 255))
