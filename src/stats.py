@@ -2,7 +2,7 @@ from cmu_graphics import *
 import math
 import random
 import stats
-import upgrades
+import logicFunctions
 
 stats.stepsPerSecond = 60
 stats.score = 0
@@ -50,8 +50,3 @@ for i in range(stats.enemyCount):
     stats.enemies.append({'x': 100 * (i + 1),'y': 100,'hp': random.randint(100, 200) * stats.enemyHpMultiplier,'vx': 0,'vy': 0,'angle': 0,'size': 10, 'type' : random.randint(1,2), 'speed' : 0.75})
     
 stats.gameOverL = ''
-
-def isColiding(app, c1x, c1y, c2x, c2y, hitboxSize):
-    if (c2x - hitboxSize <= c1x <= c2x + hitboxSize*2) and (c2y - hitboxSize <= c1y <= c2y + hitboxSize*2):
-        return True
-    return False
