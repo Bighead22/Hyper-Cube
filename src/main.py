@@ -5,17 +5,13 @@ from cmu_graphics import *
 import math
 import random
 import stats
+import upgrades
 
 app.setMaxShapeCount(160000)
 
 def onAppStart(app):
 
     app.stepsPerSecond = 60
-
-def isColiding(app, c1x, c1y, c2x, c2y, hitboxSize):
-    if (c2x - hitboxSize <= c1x <= c2x + hitboxSize*2) and (c2y - hitboxSize <= c1y <= c2y + hitboxSize*2):
-        return True
-    return False
 
 def onMousePress(app, mouseX, mouseY):
     if stats.mag != 0.05:
@@ -139,7 +135,7 @@ def onStep(app):
         
         # Check collision with each enemy
         for enemy in stats.enemies:
-            if isColiding(stats, bullet['x'], bullet['y'], enemy['x'], enemy['y'], stats.bulletSize + enemy['size'] + 10):
+            if stats.isColiding(stats, bullet['x'], bullet['y'], enemy['x'], enemy['y'], stats.bulletSize + enemy['size'] + 10):
                 enemy['hp'] -= stats.bulletDamage
                 enemy['vx'] += bullet['vx'] * stats.recoil*1.3
                 enemy['vy'] += bullet['vy'] * stats.recoil*1.3
@@ -164,7 +160,7 @@ def onStep(app):
             e1 = stats.enemies[i]
             e2 = stats.enemies[j]
             
-            if isColiding(stats, e1['x'], e1['y'], e2['x'], e2['y'], 20):
+            if stats.isColiding(stats, e1['x'], e1['y'], e2['x'], e2['y'], 20):
                 # Reverse their directions to bounce
                 e1['vx'] *= -1
                 e1['vy'] *= -1
@@ -178,7 +174,7 @@ def onStep(app):
     # Player vs Enemy collisions
     for enemy in stats.enemies:
             
-        if isColiding(stats, stats.playerX, stats.playerY, enemy['x'], enemy['y'], enemy['size'] + 5):
+        if stats.isColiding(stats, stats.playerX, stats.playerY, enemy['x'], enemy['y'], enemy['size'] + 5):
             stats.playerXSpeed += enemy['vx']
             stats.playerYSpeed += enemy['vy']
             enemy['vx'] -= stats.playerXSpeed*0.75
