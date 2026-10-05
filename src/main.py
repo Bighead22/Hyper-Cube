@@ -257,6 +257,8 @@ def redrawAll(app):
     # UI: Mag
     drawRect(10, 44, stats.maxMag*10+4, 24, fill=stats.magI)
     drawRect(12, 46, stats.mag*10, 20, fill='teal')
+    #UI:
+    drawLabel("hhhhhhhhhhhhhhhhhhhhhhh", 10,390, size=50)
     
     # Game over
     if stats.gameOverL:

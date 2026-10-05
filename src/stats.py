@@ -6,6 +6,7 @@ import logicFunctions
 
 stats.stepsPerSecond = 60
 stats.score = 0
+stats.coins = 0
 
 stats.mouseX = 375
 stats.mouseY = 375
