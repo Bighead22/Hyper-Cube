@@ -1,6 +1,4 @@
-import math
-import random
-import stats
+from cmu_graphics import *
 import logicFunctions
 
 def isColiding(app, c1x, c1y, c2x, c2y, hitboxSize):

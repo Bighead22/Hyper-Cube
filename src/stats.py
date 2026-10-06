@@ -3,10 +3,15 @@ import math
 import random
 import stats
 import logicFunctions
+import logicFunctions
+import enemyStats
+import playerStats
+import dificultyCurve
 
 stats.stepsPerSecond = 60
 stats.score = 0
 stats.coins = 0
+stats.time = 0
 
 stats.mouseX = 375
 stats.mouseY = 375

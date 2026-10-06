@@ -1,11 +1,16 @@
 #python src/main.py
 #pip install cmu-graphics
+#ollama pull qwen3.5:4b
+#ollama run qwen3.5:4b  
 
 from cmu_graphics import *
 import math
 import random
 import stats
 import logicFunctions
+import enemyStats
+import playerStats
+import dificultyCurve
 
 app.setMaxShapeCount(160000)
 
@@ -66,7 +71,8 @@ def screenWraping(app):
     
 def onStep(app):
     #app.enemyType = random.randint(0, 1)
-    stats.score += 1/30
+    stats.score += 1/app.stepsPerSecond
+    stats.time += 1/app.stepsPerSecond
     while len(stats.enemies) < stats.enemyCount:
         stats.enemies.append({'x': 100,'y': 100,'hp': random.randint(100, 200) * stats.enemyHpMultiplier,'vx': 0,'vy': 0,'angle': 0,'size': 10, 'type' : random.randint(1,2), 'speed' : 0.75})
     for enemy in stats.enemies:
@@ -113,8 +119,8 @@ def onStep(app):
 
     # Enemy logic - Loop through all enemies
     for enemy in stats.enemies:
-        ex = ((stats.playerX + stats.mouseX)/2) - enemy['x']
-        ey = ((stats.playerY + stats.mouseY)/2) - enemy['y']
+        ex = (stats.playerX) - enemy['x']
+        ey = (stats.playerY) - enemy['y']
 
         eAngle = math.atan2(ey, ex)
         enemy['vx'] += math.cos(eAngle) * enemy['speed']
@@ -146,6 +152,10 @@ def onStep(app):
                     stats.enemies.remove(enemy)
                     stats.enemyCount -= 1
                     stats.score += 10
+                    if enemy['type'] == 1:
+                        stats.coins += 3
+                    if enemy['type'] == 2:
+                        stats.coins += 5
                 break # Bullet disappears after hitting one enemy
                 
         if not hit and 0 <= bullet['x'] <= 1000 and 0 <= bullet['y'] <= 1000:
@@ -191,7 +201,7 @@ def onStep(app):
     if stats.hp <= 0.01:
         stats.hp = 0.01
         stats.gameOverL = 'You lost the game'
-        stats.stop()
+        app.stepsPerSecond = 0.0000001
 
 def trail(app):
     # Player trail
@@ -258,7 +268,8 @@ def redrawAll(app):
     drawRect(10, 44, stats.maxMag*10+4, 24, fill=stats.magI)
     drawRect(12, 46, stats.mag*10, 20, fill='teal')
     #UI:
-    drawLabel("hhhhhhhhhhhhhhhhhhhhhhh", 10,390, size=50)
+    #Money
+    drawLabel(stats.coins, 10,980, size=20,fill = rgb(255,255,255))
     
     # Game over
     if stats.gameOverL:
