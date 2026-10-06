@@ -1,0 +1,105 @@
+{
+  "version": "3.0",
+  "saved_at": 1791326220.2078557,
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are Hyper-Cube Agent V3, a local autonomous coding agent.\n\nYou operate on exactly one project through the provided tools.\n\nWORKFLOW\n- For non-trivial requests, create a short task plan first and keep it updated.\n- Inspect before editing. Existing files MUST be read before modification.\n- Prefer repo_map/search_text/find_files before broad recursive reading.\n- If a filename is ambiguous, do not guess. Ask the user for the explicit path.\n- Prefer edit_file for exact small edits, replace_lines when line ranges are clearer,\n  insert_text for insertion/appending, and write_file for new files or major rewrites.\n- After edits, run the smallest useful validation command when practical.\n- If validation fails, inspect the output and iterate.\n- Finish with a concise summary of changes, validation, and remaining issues.\n\nVISIBLE PROGRESS\n- Keep progress concise.\n- You may emit a short PLAN or NEXT sentence.\n- Every tool call should include a brief reason when useful.\n- Do NOT reveal raw hidden chain-of-thought. Provide concise conclusions and action\n  rationales instead.\n\nPATHS / SAFETY\n- Use project-relative paths only.\n- Never access files outside the project root.\n- Never bypass approval prompts.\n- Never modify unrelated files.\n- Never run destructive system commands.\n- If multiple files share a basename, use the explicit path from tool results or ask.\n- If an edit is blocked because a file changed since it was read, re-read it first.\n\nEFFICIENCY\n- This machine has limited RAM and uses a small local model.\n- Keep context and tool output focused.\n- Do not repeatedly re-read unchanged files.\n- Use partial line reads where possible.\n- Use the repository map to understand project structure cheaply.\n"
+    },
+    {
+      "role": "user",
+      "content": "hello"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {
+          "id": "call_6dashpwc",
+          "function": {
+            "index": 0,
+            "name": "project_info",
+            "arguments": {
+              "reason": "Initial greeting - checking project context"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "Project root: C:\\Users\\1929322\\Desktop\\Hyper-Cube\nApprox files: 11\nCommon extensions: .py: 9, .md: 1, .json: 1\nTop-level: .vscode/, bin/, src/, agent.py, README.md\nGit branch: main",
+      "tool_name": "project_info",
+      "tool_call_id": "call_6dashpwc"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {
+          "id": "call_akx05g41",
+          "function": {
+            "index": 0,
+            "name": "set_task_plan",
+            "arguments": {
+              "tasks": [
+                "Understand project structure",
+                "Review existing code",
+                "Implement requested feature"
+              ],
+              "reason": "Initial setup - need to understand the project before making changes"
+            }
+          }
+        },
+        {
+          "id": "call_w3ryvlp4",
+          "function": {
+            "index": 1,
+            "name": "git_status",
+            "arguments": {
+              "reason": "Check current git state and any pending changes"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "Task plan set with 3 step(s).",
+      "tool_name": "set_task_plan",
+      "tool_call_id": "call_akx05g41"
+    },
+    {
+      "role": "tool",
+      "content": "## main...origin/main\n?? .agent/\n?? agent.py",
+      "tool_name": "git_status",
+      "tool_call_id": "call_w3ryvlp4"
+    },
+    {
+      "role": "assistant",
+      "content": ""
+    }
+  ],
+  "tasks": [
+    {
+      "title": "Understand project structure",
+      "status": "in_progress",
+      "note": ""
+    },
+    {
+      "title": "Review existing code",
+      "status": "pending",
+      "note": ""
+    },
+    {
+      "title": "Implement requested feature",
+      "status": "pending",
+      "note": ""
+    }
+  ],
+  "input_history": [
+    "hello"
+  ],
+  "read_snapshots": {},
+  "undo_stack": []
+}

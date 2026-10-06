@@ -1,0 +1,9 @@
+{
+  "version": "3.0",
+  "model": "qwen3.5:4b",
+  "context": 8192,
+  "temperature": 0.2,
+  "approval_mode": "safe",
+  "verbose_tools": false,
+  "resume": true
+}
