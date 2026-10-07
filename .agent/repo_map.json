@@ -1,0 +1,230 @@
+{
+  "agent.py": {
+    "mtime_ns": 1791326042429389200,
+    "size": 108183,
+    "language": "Python",
+    "symbols": [
+      "class AgentError",
+      "class AmbiguousPathError",
+      "AmbiguousPathError.__init__",
+      "class OperationCancelled",
+      "class C",
+      "def color",
+      "def visible_len",
+      "def terminal_width",
+      "def rule",
+      "def print_rule",
+      "def human_duration",
+      "def short_text",
+      "def status_line",
+      "def ui_header",
+      "def ui_success",
+      "def ui_warn",
+      "def ui_error",
+      "def ui_activity",
+      "class Spinner",
+      "Spinner.__init__",
+      "Spinner.set_label",
+      "Spinner.start",
+      "Spinner.stop",
+      "def ensure_agent_dir",
+      "def atomic_write_json",
+      "def load_json",
+      "def load_config",
+      "def save_config",
+      "def serializable_undo_stack",
+      "def save_session",
+      "def load_session",
+      "def remember_input",
+      "def _redraw_input",
+      "def windows_readline",
+      "def read_user_input",
+      "def project_relative",
+      "def _validate_inside_project",
+      "def find_exact_basename",
+      "def resolve_path",
+      "def file_sha256",
+      "def snapshot_file",
+      "def fresh_snapshot_error",
+      "def is_probably_binary",
+      "def remember_for_undo",
+      "def undo_last_change",
+      "def confirm",
+      "def should_auto_approve",
+      "def show_diff",
+      "def render_tasks",
+      "def tool_set_task_plan",
+      "def tool_update_task",
+      "def abandon_current_task",
+      "def analyze_python_file",
+      "def analyze_generic_text",
+      "def load_repo_map_cache",
+      "def save_repo_map_cache",
+      "def iter_project_files",
+      "def refresh_repo_map",
+      "def tool_repo_map",
+      "def tool_project_info"
+    ],
+    "imports": [
+      "__future__",
+      "argparse",
+      "ast",
+      "difflib",
+      "fnmatch",
+      "hashlib",
+      "json",
+      "os",
+      "queue",
+      "re",
+      "shutil",
+      "signal",
+      "subprocess",
+      "sys",
+      "threading",
+      "time",
+      "urllib.error",
+      "urllib.request",
+      "pathlib",
+      "typing"
+    ]
+  },
+  "README.md": {
+    "mtime_ns": 1788540631582593600,
+    "size": 726,
+    "language": "Markdown",
+    "symbols": [],
+    "imports": []
+  },
+  ".vscode/settings.json": {
+    "mtime_ns": 1788540631580580700,
+    "size": 161,
+    "language": "JSON",
+    "symbols": [],
+    "imports": []
+  },
+  "bin/main.py": {
+    "mtime_ns": 1791325390309672500,
+    "size": 4188,
+    "language": "Python",
+    "symbols": [
+      "def onAppStart",
+      "def onMousePress",
+      "def onMouseMove",
+      "def onStep",
+      "def trail",
+      "def redrawAll"
+    ],
+    "imports": [
+      "math",
+      "cmu_graphics"
+    ]
+  },
+  "src/dificultyCurve.py": {
+    "mtime_ns": 1791308432772738800,
+    "size": 53,
+    "language": "Python",
+    "symbols": [],
+    "imports": [
+      "cmu_graphics",
+      "dificultyCurve"
+    ]
+  },
+  "src/enemyStats.py": {
+    "mtime_ns": 1791308426488832700,
+    "size": 47,
+    "language": "Python",
+    "symbols": [],
+    "imports": [
+      "cmu_graphics",
+      "enemyStats"
+    ]
+  },
+  "src/logicFunctions.py": {
+    "mtime_ns": 1791308412736617300,
+    "size": 253,
+    "language": "Python",
+    "symbols": [
+      "def isColiding"
+    ],
+    "imports": [
+      "cmu_graphics",
+      "logicFunctions"
+    ]
+  },
+  "src/main.py": {
+    "mtime_ns": 1791309501750654700,
+    "size": 11812,
+    "language": "Python",
+    "symbols": [
+      "def onAppStart",
+      "def onMousePress",
+      "def onKeyPress",
+      "def onMouseMove",
+      "def screenWraping",
+      "def onStep",
+      "def trail",
+      "def redrawAll"
+    ],
+    "imports": [
+      "cmu_graphics",
+      "math",
+      "random",
+      "stats",
+      "logicFunctions",
+      "enemyStats",
+      "playerStats",
+      "dificultyCurve"
+    ]
+  },
+  "src/playerStats.py": {
+    "mtime_ns": 1791308471175808400,
+    "size": 963,
+    "language": "Python",
+    "symbols": [],
+    "imports": [
+      "cmu_graphics",
+      "math",
+      "random",
+      "stats",
+      "logicFunctions",
+      "logicFunctions",
+      "enemyStats",
+      "playerStats",
+      "dificultyCurve"
+    ]
+  },
+  "src/stats.py": {
+    "mtime_ns": 1791307240696564800,
+    "size": 1562,
+    "language": "Python",
+    "symbols": [],
+    "imports": [
+      "cmu_graphics",
+      "math",
+      "random",
+      "stats",
+      "logicFunctions",
+      "logicFunctions",
+      "enemyStats",
+      "playerStats",
+      "dificultyCurve"
+    ]
+  },
+  "src/upgrades.py": {
+    "mtime_ns": 1791307156661303100,
+    "size": 176,
+    "language": "Python",
+    "symbols": [],
+    "imports": [
+      "cmu_graphics",
+      "math",
+      "random",
+      "stats",
+      "logicFunctions",
+      "logicFunctions",
+      "enemyStats",
+      "playerStats",
+      "dificultyCurve"
+    ]
+  }
+}

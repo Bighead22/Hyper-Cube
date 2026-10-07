@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Hyper-Cube Local Coding Agent V3
+Hyper-Cube Local Coding Agent V4
 ================================
 
 A polished, dependency-free local coding agent for Ollama.
@@ -12,7 +12,7 @@ Designed for:
 - Small local tool-capable models such as qwen3.5:4b
 - Low-memory / locked-down machines
 
-V3 highlights
+V4 foundation inherited from V3
 -------------
 1. Live streaming command output.
 2. Safe duplicate-filename handling.
@@ -26,6 +26,15 @@ V3 highlights
 10. Windows arrow-key history + Ctrl+C cancellation + /retry /continue /stop.
 11. Startup diagnostics for Ollama, model, tools, Git, PowerShell, and session.
 12. More polished activity UI while remaining standard-library only.
+
+V4 context engine
+-----------------
+- Automatic hierarchical compaction with durable checkpoints.
+- Tool-output pruning and same-turn compaction for long agent trajectories.
+- One-shot context-overflow recovery and manual /compact.
+- Adaptive context sizing based on live RAM/CPU pressure and model metadata.
+- Context budgeting includes system prompts, tool schemas, summaries, and output reserve.
+- Persistent compacted memory plus full archived pre-compaction history.
 
 No third-party Python packages are required.
 
@@ -72,7 +81,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 # Configuration
 # =============================================================================
 
-VERSION = "3.0"
+VERSION = "4.0"
 
 OLLAMA_BASE = "http://127.0.0.1:11434"
 CHAT_URL = OLLAMA_BASE + "/api/chat"
@@ -3254,6 +3263,1565 @@ def process_user_turn(
     return messages
 
 
+
+# =============================================================================
+# V4 context engine: auto-compact + adaptive context
+# =============================================================================
+
+# V4 deliberately keeps the durable transcript separate from the active model
+# context. Active context can be compacted aggressively without losing history.
+VERSION = "4.0"
+PS_URL = OLLAMA_BASE + "/api/ps"
+
+AUTO_COMPACT_ENABLED = True
+CONTEXT_MODE = "auto"                 # auto | fixed
+AUTO_CONTEXT_ENABLED = True
+CONTEXT_MIN = 4096
+CONTEXT_USER_MAX = 32768
+CONTEXT_STEPS = [4096, 6144, 8192, 10240, 12288, 16384, 24576, 32768]
+CONTEXT_CHANGE_COOLDOWN = 35.0
+
+# The compactor starts before the hard limit. This is intentionally conservative
+# because token counting is estimated and Ollama/model chat templates add tokens.
+COMPACT_BUFFER_RATIO = 0.20
+COMPACT_BUFFER_MIN = 1200
+COMPACT_BUFFER_MAX = 6000
+COMPACT_KEEP_RATIO = 0.24
+COMPACT_KEEP_MIN = 1200
+COMPACT_KEEP_MAX = 6000
+COMPACT_SUMMARY_RATIO = 0.14
+COMPACT_SUMMARY_MIN = 700
+COMPACT_SUMMARY_MAX = 2200
+OUTPUT_RESERVE_RATIO = 0.14
+OUTPUT_RESERVE_MIN = 900
+OUTPUT_RESERVE_MAX = 3000
+
+TOOL_RESULT_ACTIVE_SOFT_LIMIT = 7000
+TOOL_RESULT_ARCHIVE_EXCERPT = 2200
+REQUEST_ESTIMATE_SAFETY = 1.12
+
+COMPACTED_MEMORY = ""
+COMPACTION_GENERATION = 0
+COMPACTION_COUNT = 0
+LAST_COMPACTION_AT = 0.0
+LAST_CONTEXT_CHANGE_AT = 0.0
+LAST_CONTEXT_EVENT = ""
+MODEL_HAS_RUN = False
+
+_MODEL_SHOW_CACHE: Dict[str, Any] = {}
+_MODEL_SHOW_CACHE_AT = 0.0
+
+
+class ResourceMonitor:
+    """Tiny standard-library resource monitor with a rolling sample window."""
+
+    def __init__(self, interval: float = 2.0):
+        self.interval = max(0.5, float(interval))
+        self.samples: List[Dict[str, Any]] = []
+        self.lock = threading.Lock()
+        self.running = False
+        self.thread: Optional[threading.Thread] = None
+        self._prev_cpu: Optional[Tuple[int, int, int]] = None
+
+    def start(self) -> None:
+        if self.running:
+            return
+        self.running = True
+        self._sample_once()
+
+        def loop() -> None:
+            while self.running:
+                time.sleep(self.interval)
+                self._sample_once()
+
+        self.thread = threading.Thread(target=loop, daemon=True)
+        self.thread.start()
+
+    def stop(self) -> None:
+        self.running = False
+
+    def _sample_once(self) -> None:
+        mem = system_memory_info()
+        cpu = self._cpu_percent()
+        sample = {
+            "time": time.time(),
+            "total": int(mem.get("total", 0)),
+            "available": int(mem.get("available", 0)),
+            "cpu": cpu,
+        }
+        with self.lock:
+            self.samples.append(sample)
+            del self.samples[:-30]
+
+    def _cpu_percent(self) -> Optional[float]:
+        try:
+            if os.name == "nt":
+                import ctypes
+                from ctypes import wintypes
+
+                class FILETIME(ctypes.Structure):
+                    _fields_ = [("dwLowDateTime", wintypes.DWORD),
+                                ("dwHighDateTime", wintypes.DWORD)]
+
+                idle = FILETIME()
+                kernel = FILETIME()
+                user = FILETIME()
+                ok = ctypes.windll.kernel32.GetSystemTimes(
+                    ctypes.byref(idle), ctypes.byref(kernel), ctypes.byref(user)
+                )
+                if not ok:
+                    return None
+
+                def ft(x: Any) -> int:
+                    return (int(x.dwHighDateTime) << 32) | int(x.dwLowDateTime)
+
+                current = (ft(idle), ft(kernel), ft(user))
+                if self._prev_cpu is None:
+                    self._prev_cpu = current
+                    return None
+
+                p_idle, p_kernel, p_user = self._prev_cpu
+                self._prev_cpu = current
+                d_idle = current[0] - p_idle
+                d_total = (current[1] - p_kernel) + (current[2] - p_user)
+                if d_total <= 0:
+                    return None
+                return max(0.0, min(100.0, 100.0 * (1.0 - d_idle / d_total)))
+
+            stat = Path("/proc/stat")
+            if stat.exists():
+                parts = stat.read_text(encoding="utf-8").splitlines()[0].split()[1:]
+                vals = [int(x) for x in parts]
+                idle = vals[3] + (vals[4] if len(vals) > 4 else 0)
+                total = sum(vals)
+                current = (idle, total, 0)
+                if self._prev_cpu is None:
+                    self._prev_cpu = current
+                    return None
+                p_idle, p_total, _ = self._prev_cpu
+                self._prev_cpu = current
+                d_total = total - p_total
+                if d_total <= 0:
+                    return None
+                return max(0.0, min(100.0, 100.0 * (1.0 - (idle - p_idle) / d_total)))
+        except Exception:
+            return None
+        return None
+
+    def snapshot(self) -> Dict[str, Any]:
+        with self.lock:
+            samples = list(self.samples)
+        if not samples:
+            mem = system_memory_info()
+            return {"total": mem.get("total", 0), "available": mem.get("available", 0), "cpu": None}
+
+        latest = dict(samples[-1])
+        recent = samples[-5:]
+        avails = [int(x.get("available", 0)) for x in recent if x.get("available")]
+        cpus = [float(x["cpu"]) for x in recent if x.get("cpu") is not None]
+        latest["stable_available"] = min(avails) if avails else int(latest.get("available", 0))
+        latest["cpu_avg"] = sum(cpus) / len(cpus) if cpus else latest.get("cpu")
+        return latest
+
+
+RESOURCE_MONITOR = ResourceMonitor()
+
+
+def system_memory_info() -> Dict[str, int]:
+    """Return total/available physical RAM without third-party packages."""
+    try:
+        if os.name == "nt":
+            import ctypes
+
+            class MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+
+            s = MEMORYSTATUSEX()
+            s.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(s)):
+                return {"total": int(s.ullTotalPhys), "available": int(s.ullAvailPhys)}
+
+        meminfo = Path("/proc/meminfo")
+        if meminfo.exists():
+            values: Dict[str, int] = {}
+            for line in meminfo.read_text(encoding="utf-8").splitlines():
+                if ":" not in line:
+                    continue
+                key, rest = line.split(":", 1)
+                try:
+                    values[key] = int(rest.strip().split()[0]) * 1024
+                except Exception:
+                    pass
+            return {
+                "total": values.get("MemTotal", 0),
+                "available": values.get("MemAvailable", values.get("MemFree", 0)),
+            }
+
+        # Generic POSIX fallback.
+        page = os.sysconf("SC_PAGE_SIZE")
+        pages = os.sysconf("SC_PHYS_PAGES")
+        avail_pages = os.sysconf("SC_AVPHYS_PAGES")
+        return {"total": int(page * pages), "available": int(page * avail_pages)}
+    except Exception:
+        return {"total": 0, "available": 0}
+
+
+def fmt_bytes(value: int) -> str:
+    value = max(0, int(value))
+    gib = value / (1024 ** 3)
+    if gib >= 0.1:
+        return f"{gib:.2f} GB"
+    return f"{value / (1024 ** 2):.0f} MB"
+
+
+def model_show_data(force: bool = False) -> Dict[str, Any]:
+    global _MODEL_SHOW_CACHE, _MODEL_SHOW_CACHE_AT
+    now = time.time()
+    if not force and _MODEL_SHOW_CACHE and now - _MODEL_SHOW_CACHE_AT < 300:
+        return _MODEL_SHOW_CACHE
+    try:
+        _MODEL_SHOW_CACHE = ollama_request_json(
+            SHOW_URL,
+            method="POST",
+            payload={"model": CURRENT_MODEL},
+            timeout=20,
+        )
+        _MODEL_SHOW_CACHE_AT = now
+    except Exception:
+        if not _MODEL_SHOW_CACHE:
+            _MODEL_SHOW_CACHE = {}
+    return _MODEL_SHOW_CACHE
+
+
+def model_declared_context_limit() -> int:
+    data = model_show_data()
+    info = data.get("model_info", {}) if isinstance(data, dict) else {}
+    candidates: List[int] = []
+    if isinstance(info, dict):
+        for key, value in info.items():
+            if str(key).lower().endswith("context_length"):
+                try:
+                    candidates.append(int(value))
+                except Exception:
+                    pass
+    return max(candidates) if candidates else CONTEXT_USER_MAX
+
+
+def estimated_kv_bytes_per_token() -> int:
+    """Conservative F16 KV-cache estimate from GGUF metadata when available."""
+    data = model_show_data()
+    info = data.get("model_info", {}) if isinstance(data, dict) else {}
+    if not isinstance(info, dict):
+        return 128 * 1024
+
+    arch = str(info.get("general.architecture", "")).strip()
+    prefixes = [arch] if arch else []
+    prefixes += [
+        str(k).split(".block_count", 1)[0]
+        for k in info
+        if str(k).endswith(".block_count")
+    ]
+
+    for prefix in dict.fromkeys(x for x in prefixes if x):
+        try:
+            layers = int(info[f"{prefix}.block_count"])
+            embed = int(info[f"{prefix}.embedding_length"])
+            heads = int(info[f"{prefix}.attention.head_count"])
+            kv_heads = int(info.get(f"{prefix}.attention.head_count_kv", heads))
+            if layers > 0 and embed > 0 and heads > 0 and kv_heads > 0:
+                head_dim = embed / heads
+                # K + V, each conservatively assumed F16 (2 bytes).
+                raw = 2.0 * layers * kv_heads * head_dim * 2.0
+                return int(raw * 1.15)
+        except Exception:
+            continue
+
+    return 128 * 1024
+
+
+def effective_context_ceiling() -> int:
+    declared = max(CONTEXT_MIN, model_declared_context_limit())
+    user_cap = max(CONTEXT_MIN, CONTEXT_USER_MAX)
+    snap = RESOURCE_MONITOR.snapshot()
+    total = int(snap.get("total", 0))
+
+    # Hardware-aware cap. It is still only a ceiling; live free RAM decides
+    # whether an upward step actually happens.
+    hardware_cap = 32768
+    if total:
+        gib = total / (1024 ** 3)
+        if gib <= 9.5:
+            hardware_cap = 16384
+        elif gib <= 13.5:
+            hardware_cap = 24576
+
+    return max(CONTEXT_MIN, min(declared, user_cap, hardware_cap))
+
+
+def runtime_state_message() -> str:
+    task_lines = []
+    for i, task in enumerate(TASKS[:12], 1):
+        task_lines.append(
+            f"{i}. [{task.get('status', 'pending')}] {task.get('title', '')}"
+            + (f" — {task.get('note', '')}" if task.get('note') else "")
+        )
+
+    read_files = list(READ_SNAPSHOTS.keys())[-16:]
+    changed: List[str] = []
+    for p, _existed, _old in reversed(UNDO_STACK[-12:]):
+        rel = project_relative(p)
+        if rel not in changed:
+            changed.append(rel)
+
+    state = [
+        "<runtime_state>",
+        f"project={PROJECT_ROOT}",
+        f"git_branch={get_git_branch() or '(none)'}",
+        f"context={CONTEXT_SIZE}; context_mode={CONTEXT_MODE}; auto_compact={AUTO_COMPACT_ENABLED}",
+        f"compaction_generation={COMPACTION_GENERATION}",
+    ]
+    if task_lines:
+        state.append("tasks:\n" + "\n".join(task_lines))
+    if read_files:
+        state.append("recently_read=" + ", ".join(read_files))
+    if changed:
+        state.append("recent_agent_edits=" + ", ".join(changed[:10]))
+    state.append("</runtime_state>")
+    return "\n".join(state)
+
+
+def prepare_request_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    if not messages:
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+
+    result: List[Dict[str, Any]] = [messages[0]]
+    if COMPACTED_MEMORY.strip():
+        result.append({
+            "role": "system",
+            "content": (
+                "<compacted_session_memory>\n"
+                + COMPACTED_MEMORY.strip()
+                + "\n</compacted_session_memory>"
+            ),
+        })
+    result.append({"role": "system", "content": runtime_state_message()})
+    result.extend(messages[1:])
+    return result
+
+
+def _rough_tokens(value: Any) -> int:
+    try:
+        raw = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    except Exception:
+        raw = str(value)
+    return max(1, int((len(raw) / 4.0) * REQUEST_ESTIMATE_SAFETY))
+
+
+def estimate_request_tokens(messages: List[Dict[str, Any]], include_tools: bool = True) -> int:
+    prepared = prepare_request_messages(messages)
+    total = _rough_tokens(prepared)
+    if include_tools:
+        total += _rough_tokens(TOOLS)
+    # Chat template / special-token uncertainty.
+    return total + 96
+
+
+def output_reserve_tokens() -> int:
+    return max(
+        OUTPUT_RESERVE_MIN,
+        min(OUTPUT_RESERVE_MAX, int(CONTEXT_SIZE * OUTPUT_RESERVE_RATIO)),
+    )
+
+
+def compact_buffer_tokens() -> int:
+    return max(
+        COMPACT_BUFFER_MIN,
+        min(COMPACT_BUFFER_MAX, int(CONTEXT_SIZE * COMPACT_BUFFER_RATIO)),
+    )
+
+
+def compact_keep_tokens() -> int:
+    return max(
+        COMPACT_KEEP_MIN,
+        min(COMPACT_KEEP_MAX, int(CONTEXT_SIZE * COMPACT_KEEP_RATIO)),
+    )
+
+
+def compact_summary_target_tokens() -> int:
+    return max(
+        COMPACT_SUMMARY_MIN,
+        min(COMPACT_SUMMARY_MAX, int(CONTEXT_SIZE * COMPACT_SUMMARY_RATIO)),
+    )
+
+
+def context_trigger_tokens() -> int:
+    reserve = max(compact_buffer_tokens(), output_reserve_tokens() + 256)
+    return max(CONTEXT_MIN // 2, CONTEXT_SIZE - reserve)
+
+
+def context_bar(messages: List[Dict[str, Any]]) -> str:
+    used = estimate_request_tokens(messages, include_tools=True)
+    pct = min(100.0, used / max(1, CONTEXT_SIZE) * 100.0)
+    width = 18
+    filled = int(width * pct / 100.0)
+    bar = "█" * filled + "░" * (width - filled)
+    return f"{bar} ~{used:,}/{CONTEXT_SIZE:,} ({pct:.0f}%)"
+
+
+def context_status_lines(messages: Optional[List[Dict[str, Any]]] = None) -> List[str]:
+    snap = RESOURCE_MONITOR.snapshot()
+    total = int(snap.get("total", 0))
+    avail = int(snap.get("stable_available", snap.get("available", 0)))
+    cpu = snap.get("cpu_avg")
+    ceiling = effective_context_ceiling()
+    kv = estimated_kv_bytes_per_token()
+
+    lines = [
+        f"mode={CONTEXT_MODE}; auto_context={AUTO_CONTEXT_ENABLED}",
+        f"current={CONTEXT_SIZE:,}; ceiling={ceiling:,}; model_declared={model_declared_context_limit():,}",
+        f"estimated_KV={kv / 1024:.0f} KB/token",
+    ]
+    if total:
+        lines.append(
+            f"RAM available={fmt_bytes(avail)} / {fmt_bytes(total)}"
+            + (f"; CPU avg={float(cpu):.0f}%" if cpu is not None else "")
+        )
+    if messages is not None:
+        used = estimate_request_tokens(messages)
+        lines.append(
+            f"request_estimate={used:,}; auto-compact trigger={context_trigger_tokens():,}; "
+            f"output reserve={output_reserve_tokens():,}"
+        )
+    if LAST_CONTEXT_EVENT:
+        lines.append("last_event=" + LAST_CONTEXT_EVENT)
+    return lines
+
+
+def _context_steps() -> List[int]:
+    ceiling = effective_context_ceiling()
+    vals = [x for x in CONTEXT_STEPS if CONTEXT_MIN <= x <= ceiling]
+    if CONTEXT_SIZE not in vals and CONTEXT_MIN <= CONTEXT_SIZE <= ceiling:
+        vals.append(CONTEXT_SIZE)
+    return sorted(set(vals))
+
+
+def maybe_auto_tune_context(messages: List[Dict[str, Any]], allow_increase: bool = True) -> bool:
+    global CONTEXT_SIZE, LAST_CONTEXT_CHANGE_AT, LAST_CONTEXT_EVENT
+
+    if not AUTO_CONTEXT_ENABLED or CONTEXT_MODE != "auto":
+        return False
+
+    now = time.time()
+    if now - LAST_CONTEXT_CHANGE_AT < CONTEXT_CHANGE_COOLDOWN:
+        return False
+
+    snap = RESOURCE_MONITOR.snapshot()
+    total = int(snap.get("total", 0))
+    avail = int(snap.get("stable_available", snap.get("available", 0)))
+    cpu = snap.get("cpu_avg")
+    if total <= 0 or avail <= 0:
+        return False
+
+    steps = _context_steps()
+    if not steps:
+        return False
+
+    used = estimate_request_tokens(messages)
+    pressure = used / max(1, CONTEXT_SIZE)
+    reserve = max(int(total * 0.16), int(1.15 * 1024 ** 3))
+    emergency = max(int(total * 0.09), int(700 * 1024 ** 2))
+
+    # Memory distress: shrink by one safe step. The normal preflight immediately
+    # compacts if the active request no longer fits the smaller window.
+    if avail < emergency and CONTEXT_SIZE > CONTEXT_MIN:
+        lower = [x for x in steps if x < CONTEXT_SIZE]
+        if lower:
+            new_ctx = lower[-1]
+            CONTEXT_SIZE = new_ctx
+            LAST_CONTEXT_CHANGE_AT = now
+            LAST_CONTEXT_EVENT = (
+                f"auto-decreased to {new_ctx:,}: low available RAM ({fmt_bytes(avail)})"
+            )
+            save_config()
+            ui_warn(LAST_CONTEXT_EVENT)
+            return True
+
+    if not allow_increase or not MODEL_HAS_RUN or pressure < 0.56:
+        return False
+
+    # Avoid making an already CPU-saturated local session even heavier. This is
+    # advisory; memory remains the primary criterion.
+    if cpu is not None and float(cpu) >= 97.0:
+        return False
+
+    higher = [x for x in steps if x > CONTEXT_SIZE]
+    if not higher:
+        return False
+
+    candidate = higher[0]
+    extra_tokens = candidate - CONTEXT_SIZE
+    extra_memory = int(extra_tokens * estimated_kv_bytes_per_token())
+
+    if avail - extra_memory < reserve:
+        return False
+
+    old = CONTEXT_SIZE
+    CONTEXT_SIZE = candidate
+    LAST_CONTEXT_CHANGE_AT = now
+    LAST_CONTEXT_EVENT = (
+        f"auto-increased {old:,} → {candidate:,}; RAM headroom after estimated KV growth "
+        f"≈ {fmt_bytes(avail - extra_memory)}"
+    )
+    save_config()
+    ui_success(LAST_CONTEXT_EVENT)
+    return True
+
+
+def _safe_tool_excerpt(text: str, limit: int = TOOL_RESULT_ARCHIVE_EXCERPT) -> str:
+    if len(text) <= limit * 2:
+        return text
+    digest = hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()[:12]
+    return (
+        text[:limit]
+        + f"\n... [middle pruned; sha256={digest}; original_chars={len(text)}] ...\n"
+        + text[-limit:]
+    )
+
+
+def _summary_message_repr(msg: Dict[str, Any]) -> str:
+    role = str(msg.get("role", "unknown"))
+    if role == "tool":
+        name = str(msg.get("tool_name", "tool"))
+        return f"TOOL RESULT [{name}]:\n{_safe_tool_excerpt(str(msg.get('content', '')))}"
+
+    content = str(msg.get("content", ""))
+    calls = msg.get("tool_calls") or []
+    call_text = ""
+    if calls:
+        compact_calls = []
+        for c in calls[:8]:
+            fn = c.get("function", {}) if isinstance(c, dict) else {}
+            args = fn.get("arguments", {}) if isinstance(fn, dict) else {}
+            if isinstance(args, dict):
+                args = {
+                    k: (f"<{len(str(v))} chars>" if k in {"content", "old_text", "new_text", "text"} else v)
+                    for k, v in args.items()
+                }
+            compact_calls.append({"name": fn.get("name"), "arguments": args})
+        call_text = "\nTOOL CALLS: " + json.dumps(compact_calls, ensure_ascii=False)
+
+    if len(content) > 6000:
+        content = _safe_tool_excerpt(content, 2600)
+    return f"{role.upper()}:\n{content}{call_text}"
+
+
+def _interaction_units(group: List[Dict[str, Any]]) -> Tuple[Optional[Dict[str, Any]], List[List[Dict[str, Any]]]]:
+    if not group:
+        return None, []
+    user = group[0] if group[0].get("role") == "user" else None
+    rest = group[1:] if user is not None else group[:]
+    units: List[List[Dict[str, Any]]] = []
+    current: List[Dict[str, Any]] = []
+
+    for msg in rest:
+        if msg.get("role") == "assistant":
+            if current:
+                units.append(current)
+            current = [msg]
+        else:
+            if not current:
+                current = [msg]
+            else:
+                current.append(msg)
+    if current:
+        units.append(current)
+    return user, units
+
+
+def _active_tool_prune(msg: Dict[str, Any], newest: bool = False) -> Dict[str, Any]:
+    if msg.get("role") != "tool":
+        return msg
+    content = str(msg.get("content", ""))
+    limit = TOOL_RESULT_ACTIVE_SOFT_LIMIT if newest else max(2600, TOOL_RESULT_ACTIVE_SOFT_LIMIT // 2)
+    if len(content) <= limit:
+        return msg
+    copy_msg = dict(msg)
+    copy_msg["content"] = _safe_tool_excerpt(content, limit // 2)
+    return copy_msg
+
+
+def select_compaction_split(
+    messages: List[Dict[str, Any]],
+    keep_tokens: int,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Return (messages_to_summarize, new_active_messages)."""
+    systems, groups = split_turn_groups(messages)
+    base_system = systems[:1] or [{"role": "system", "content": SYSTEM_PROMPT}]
+    if not groups:
+        return [], list(base_system)
+
+    recent_groups: List[List[Dict[str, Any]]] = []
+    old_messages: List[Dict[str, Any]] = []
+    used = 0
+
+    # Always handle the newest group specially, including a long in-progress turn.
+    newest_group = groups[-1]
+    newest_tokens = _rough_tokens(newest_group)
+
+    if newest_tokens <= keep_tokens:
+        recent_groups = [newest_group]
+        used = newest_tokens
+    else:
+        user, units = _interaction_units(newest_group)
+        kept_units: List[List[Dict[str, Any]]] = []
+        budget = max(500, keep_tokens - (_rough_tokens(user) if user else 0) - 80)
+        unit_used = 0
+
+        for unit in reversed(units):
+            # Estimate with tool outputs softly pruned, so one giant command output
+            # cannot monopolize the entire post-compaction tail.
+            probe = []
+            for idx, m in enumerate(unit):
+                probe.append(_active_tool_prune(m, newest=(len(kept_units) == 0 and idx == len(unit) - 1)))
+            t = _rough_tokens(probe)
+            if kept_units and unit_used + t > budget:
+                break
+            kept_units.insert(0, probe)
+            unit_used += t
+
+        cut = max(0, len(units) - len(kept_units))
+        for unit in units[:cut]:
+            old_messages.extend(unit)
+
+        active_group: List[Dict[str, Any]] = []
+        if user is not None:
+            active_group.append(user)
+        if old_messages:
+            active_group.append({
+                "role": "assistant",
+                "content": "[Earlier work in this same turn was compacted into session memory.]",
+            })
+        for unit in kept_units:
+            active_group.extend(unit)
+        recent_groups = [active_group]
+        used = _rough_tokens(active_group)
+
+    # Add earlier complete groups from newest backwards while they fit.
+    for group in reversed(groups[:-1]):
+        t = _rough_tokens(group)
+        if used + t <= keep_tokens:
+            recent_groups.insert(0, group)
+            used += t
+        else:
+            break
+
+    kept_group_count = len(recent_groups)
+    earlier_cut = len(groups) - kept_group_count
+
+    # If the newest group was internally split, earlier_cut arithmetic includes
+    # it as a kept group. Add only truly older complete groups here.
+    older_complete = groups[:max(0, len(groups) - kept_group_count)]
+    for group in older_complete:
+        old_messages.extend(group)
+
+    active = list(base_system)
+    for group in recent_groups:
+        active.extend(group)
+
+    # Preserve every removed interaction in order. Two distinct tool calls can
+    # legitimately have identical serialized content, so value-based de-duplication
+    # would silently erase real history.
+    return old_messages, active
+
+
+def _split_compaction_text(text: str, max_chars: int) -> List[str]:
+    if len(text) <= max_chars:
+        return [text]
+    chunks: List[str] = []
+    start = 0
+    while start < len(text):
+        end = min(len(text), start + max_chars)
+        if end < len(text):
+            cut = text.rfind("\n", start, end)
+            if cut > start + max_chars // 2:
+                end = cut
+        chunks.append(text[start:end])
+        start = end
+    return [c for c in chunks if c.strip()]
+
+
+COMPACTION_SYSTEM_PROMPT = """You are the continuation-memory compactor for a coding agent.
+Produce a dense, factual checkpoint that lets the same coding agent continue without the old transcript.
+Do not solve the user's task. Do not add new facts. Preserve exact technical details when they matter.
+
+Use these headings exactly when relevant:
+## Goal
+## User requirements and constraints
+## Current task plan
+## Decisions and architecture
+## Files and symbols
+## Changes already made
+## Commands, tests, and outcomes
+## Errors and blockers
+## Important exact values
+## Pending work and next step
+
+Rules:
+- Prefer concrete file paths, symbol names, commands, error text, and outcomes.
+- Preserve unresolved questions and user corrections.
+- Do not retain huge raw tool output when a concise factual result is enough.
+- If an older checkpoint is supplied, update it rather than blindly duplicating it.
+- Keep the checkpoint compact enough for a small local model context.
+Return only the checkpoint."""
+
+
+def compact_model_call(previous: str, chunk: str, target_tokens: int) -> str:
+    prompt = (
+        "PREVIOUS CHECKPOINT:\n"
+        + (previous.strip() if previous.strip() else "(none)")
+        + "\n\nNEW HISTORY TO MERGE:\n"
+        + chunk.strip()
+        + "\n\nUpdate the checkpoint with all information that remains necessary."
+    )
+    payload = {
+        "model": CURRENT_MODEL,
+        "messages": [
+            {"role": "system", "content": COMPACTION_SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
+        "stream": False,
+        "options": {
+            "num_ctx": CONTEXT_SIZE,
+            "temperature": 0.0,
+            "num_predict": int(target_tokens),
+        },
+    }
+    data = ollama_request_json(CHAT_URL, method="POST", payload=payload, timeout=600)
+    msg = data.get("message", {}) if isinstance(data, dict) else {}
+    return str(msg.get("content", "")).strip()
+
+
+def deterministic_compaction_fallback(
+    prior: str,
+    old_messages: List[Dict[str, Any]],
+) -> str:
+    lines = []
+    if prior.strip():
+        lines.append("## Earlier checkpoint\n" + prior.strip())
+    lines.append("## Deterministic recovery summary")
+
+    for msg in old_messages[-24:]:
+        role = msg.get("role")
+        if role == "user":
+            lines.append("USER: " + short_text(msg.get("content", ""), 900))
+        elif role == "assistant" and msg.get("content"):
+            lines.append("ASSISTANT: " + short_text(msg.get("content", ""), 700))
+        elif role == "tool":
+            lines.append(
+                f"TOOL {msg.get('tool_name', 'tool')}: "
+                + short_text(msg.get("content", ""), 700)
+            )
+
+    if TASKS:
+        lines.append("## Current task plan")
+        for i, task in enumerate(TASKS, 1):
+            lines.append(f"{i}. [{task.get('status')}] {task.get('title')} {task.get('note', '')}".strip())
+
+    return "\n".join(lines)[-9000:]
+
+
+def _compaction_archive_path() -> Path:
+    return AGENT_DIR / "compactions.jsonl"
+
+
+def archive_compaction(
+    removed: List[Dict[str, Any]],
+    prior_summary: str,
+    new_summary: str,
+    reason: str,
+    before_tokens: int,
+    after_tokens: int,
+) -> None:
+    try:
+        ensure_agent_dir()
+        record = {
+            "time": time.time(),
+            "generation": COMPACTION_GENERATION,
+            "reason": reason,
+            "before_tokens": before_tokens,
+            "after_tokens": after_tokens,
+            "prior_summary": prior_summary,
+            "new_summary": new_summary,
+            "removed_messages": removed,
+        }
+        with _compaction_archive_path().open("a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
+def compact_session(
+    messages: List[Dict[str, Any]],
+    reason: str,
+    force: bool = False,
+) -> List[Dict[str, Any]]:
+    global COMPACTED_MEMORY, COMPACTION_GENERATION, COMPACTION_COUNT, LAST_COMPACTION_AT
+
+    before = estimate_request_tokens(messages)
+    keep = compact_keep_tokens()
+    old_messages, active = select_compaction_split(messages, keep)
+
+    if not old_messages and not force:
+        return messages
+
+    # Manual compaction on a short session still compacts all but the newest
+    # conversational turn where possible.
+    if not old_messages and force:
+        systems, groups = split_turn_groups(messages)
+        if len(groups) > 1:
+            old_messages = [m for g in groups[:-1] for m in g]
+            active = (systems[:1] or [{"role": "system", "content": SYSTEM_PROMPT}]) + groups[-1]
+        else:
+            ui_warn("There is not enough older context to compact yet.")
+            return messages
+
+    ui_header("AUTO COMPACT" if not force else "COMPACT", C.BRIGHT_CYAN)
+    status_line("reason", reason, C.BRIGHT_BLACK)
+    status_line("before", f"~{before:,} / {CONTEXT_SIZE:,} tokens", C.WHITE)
+    status_line("keep tail", f"~{keep:,} tokens target", C.WHITE)
+
+    material = "\n\n".join(_summary_message_repr(m) for m in old_messages)
+    target = compact_summary_target_tokens()
+
+    # Keep each summarization request comfortably inside the same local model's
+    # context, even when compaction was triggered by an emergency overflow.
+    chunk_token_budget = max(900, int(CONTEXT_SIZE * 0.47))
+    chunk_chars = max(4000, chunk_token_budget * 4)
+    chunks = _split_compaction_text(material, chunk_chars)
+
+    prior = COMPACTED_MEMORY
+    summary = prior
+    spinner = Spinner("Compacting session memory")
+    spinner.start()
+    started = time.time()
+    failed: Optional[str] = None
+
+    try:
+        for i, chunk in enumerate(chunks or [""]):
+            spinner.set_label(f"Compacting memory {i + 1}/{max(1, len(chunks))}")
+            summary = compact_model_call(summary, chunk, target)
+            if not summary:
+                raise AgentError("Compaction model returned an empty checkpoint.")
+            # Bound pathological verbose summaries before the next merge pass.
+            if len(summary) > 12000:
+                summary = summary[:12000]
+    except Exception as e:
+        failed = str(e)
+        summary = deterministic_compaction_fallback(prior, old_messages)
+    finally:
+        spinner.stop()
+
+    COMPACTED_MEMORY = summary.strip()
+    COMPACTION_GENERATION += 1
+    COMPACTION_COUNT += 1
+    LAST_COMPACTION_AT = time.time()
+
+    after = estimate_request_tokens(active)
+    archive_compaction(old_messages, prior, COMPACTED_MEMORY, reason, before, after)
+    save_session(active)
+
+    elapsed = time.time() - started
+    if failed:
+        ui_warn("Model-based summary failed; used deterministic fallback: " + short_text(failed, 180))
+    ui_success(
+        f"checkpoint {COMPACTION_GENERATION} complete · ~{before:,} → ~{after:,} tokens · {human_duration(elapsed)}"
+    )
+    status_line("summary", f"~{_rough_tokens(COMPACTED_MEMORY):,} tokens", C.WHITE)
+    print()
+    return active
+
+
+def is_context_overflow_error(error: BaseException) -> bool:
+    text = str(error).lower()
+    patterns = [
+        "context length", "context window", "too many tokens", "prompt too long",
+        "input too long", "exceeds the context", "context size", "maximum context",
+        "token limit", "context limit",
+    ]
+    return any(p in text for p in patterns)
+
+
+def ensure_context_capacity(
+    messages: List[Dict[str, Any]],
+    reason: str,
+) -> List[Dict[str, Any]]:
+    # First try to grow the window safely if the computer has real headroom.
+    maybe_auto_tune_context(messages, allow_increase=True)
+
+    used = estimate_request_tokens(messages)
+    trigger = context_trigger_tokens()
+
+    if AUTO_COMPACT_ENABLED and used >= trigger:
+        return compact_session(
+            messages,
+            reason=f"{reason}: request estimate {used:,} reached trigger {trigger:,}",
+            force=False,
+        )
+
+    # Even with automatic compaction disabled, never knowingly send a request
+    # that has effectively no completion reserve. This is an emergency guard.
+    hard_guard = CONTEXT_SIZE - max(512, output_reserve_tokens() // 2)
+    if used >= hard_guard:
+        return compact_session(
+            messages,
+            reason=f"emergency hard guard: {used:,} estimated tokens",
+            force=True,
+        )
+
+    return messages
+
+
+def prune_history(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """V4 compatibility shim: compaction replaces destructive history pruning."""
+    return ensure_context_capacity(messages, "history maintenance")
+
+
+# Extend the system prompt without bloating every message with implementation detail.
+SYSTEM_PROMPT = SYSTEM_PROMPT.replace("Hyper-Cube Agent V3", "Hyper-Cube Agent V4") + """
+
+V4 CONTEXT CONTINUITY
+- Session memory may be compacted automatically. Treat <compacted_session_memory> as factual prior context.
+- Treat <runtime_state> as current harness state and prefer it over stale older transcript details.
+- Do not resist or redo completed work merely because older raw tool output was compacted.
+- When an edit is blocked as stale, re-read that file and continue.
+"""
+
+
+# -----------------------------------------------------------------------------
+# V4 persistence overrides
+# -----------------------------------------------------------------------------
+
+
+def load_config() -> None:
+    global CURRENT_MODEL, CONTEXT_SIZE, TEMPERATURE
+    global APPROVAL_MODE, VERBOSE_TOOLS, RESUME_ENABLED
+    global AUTO_COMPACT_ENABLED, AUTO_CONTEXT_ENABLED, CONTEXT_MODE, CONTEXT_USER_MAX
+
+    data = load_json(CONFIG_PATH, {})
+    if not isinstance(data, dict):
+        return
+
+    CURRENT_MODEL = str(data.get("model", CURRENT_MODEL))
+    try:
+        CONTEXT_SIZE = max(CONTEXT_MIN, min(int(data.get("context", CONTEXT_SIZE)), 32768))
+    except Exception:
+        pass
+    try:
+        TEMPERATURE = max(0.0, min(float(data.get("temperature", TEMPERATURE)), 2.0))
+    except Exception:
+        pass
+
+    mode = str(data.get("approval_mode", APPROVAL_MODE))
+    if mode in {"safe", "edit", "full"}:
+        APPROVAL_MODE = mode
+
+    VERBOSE_TOOLS = bool(data.get("verbose_tools", VERBOSE_TOOLS))
+    RESUME_ENABLED = bool(data.get("resume", RESUME_ENABLED))
+    AUTO_COMPACT_ENABLED = bool(data.get("auto_compact", AUTO_COMPACT_ENABLED))
+    AUTO_CONTEXT_ENABLED = bool(data.get("auto_context", AUTO_CONTEXT_ENABLED))
+
+    ctx_mode = str(data.get("context_mode", CONTEXT_MODE))
+    if ctx_mode in {"auto", "fixed"}:
+        CONTEXT_MODE = ctx_mode
+    try:
+        CONTEXT_USER_MAX = max(CONTEXT_MIN, min(int(data.get("context_max", CONTEXT_USER_MAX)), 32768))
+    except Exception:
+        pass
+
+
+def save_config() -> None:
+    data = {
+        "version": VERSION,
+        "model": CURRENT_MODEL,
+        "context": CONTEXT_SIZE,
+        "temperature": TEMPERATURE,
+        "approval_mode": APPROVAL_MODE,
+        "verbose_tools": VERBOSE_TOOLS,
+        "resume": RESUME_ENABLED,
+        "auto_compact": AUTO_COMPACT_ENABLED,
+        "auto_context": AUTO_CONTEXT_ENABLED,
+        "context_mode": CONTEXT_MODE,
+        "context_max": CONTEXT_USER_MAX,
+    }
+    try:
+        atomic_write_json(CONFIG_PATH, data)
+    except Exception:
+        pass
+
+
+def _trim_session_messages_v4(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    if len(messages) <= MAX_SESSION_MESSAGES:
+        return messages
+    systems, groups = split_turn_groups(messages)
+    kept: List[List[Dict[str, Any]]] = []
+    count = len(systems)
+    for group in reversed(groups):
+        if kept and count + len(group) > MAX_SESSION_MESSAGES:
+            break
+        kept.insert(0, group)
+        count += len(group)
+    result = list(systems[:1])
+    for group in kept:
+        result.extend(group)
+    return result
+
+
+def save_session(messages: List[Dict[str, Any]]) -> None:
+    data = {
+        "version": VERSION,
+        "saved_at": time.time(),
+        "messages": _trim_session_messages_v4(messages),
+        "compacted_memory": COMPACTED_MEMORY,
+        "compaction_generation": COMPACTION_GENERATION,
+        "compaction_count": COMPACTION_COUNT,
+        "tasks": TASKS,
+        "input_history": INPUT_HISTORY[-MAX_INPUT_HISTORY:],
+        "read_snapshots": READ_SNAPSHOTS,
+        "undo_stack": serializable_undo_stack(),
+    }
+    try:
+        atomic_write_json(SESSION_PATH, data)
+    except Exception:
+        pass
+
+
+def load_session(system_prompt: str) -> Tuple[List[Dict[str, Any]], bool]:
+    global TASKS, INPUT_HISTORY, READ_SNAPSHOTS, UNDO_STACK
+    global COMPACTED_MEMORY, COMPACTION_GENERATION, COMPACTION_COUNT
+
+    if not RESUME_ENABLED:
+        return [{"role": "system", "content": system_prompt}], False
+
+    data = load_json(SESSION_PATH, {})
+    if not isinstance(data, dict) or not data:
+        return [{"role": "system", "content": system_prompt}], False
+
+    msgs = data.get("messages")
+    if not isinstance(msgs, list) or not msgs:
+        return [{"role": "system", "content": system_prompt}], False
+
+    cleaned = [{"role": "system", "content": system_prompt}]
+    for m in msgs:
+        if isinstance(m, dict) and m.get("role") != "system":
+            cleaned.append(m)
+
+    COMPACTED_MEMORY = str(data.get("compacted_memory", "") or "")
+    try:
+        COMPACTION_GENERATION = int(data.get("compaction_generation", 0))
+        COMPACTION_COUNT = int(data.get("compaction_count", COMPACTION_GENERATION))
+    except Exception:
+        COMPACTION_GENERATION = 0
+        COMPACTION_COUNT = 0
+
+    raw_tasks = data.get("tasks", [])
+    if isinstance(raw_tasks, list):
+        TASKS = [
+            {
+                "title": str(x.get("title", "")),
+                "status": str(x.get("status", "pending")),
+                "note": str(x.get("note", "")),
+            }
+            for x in raw_tasks
+            if isinstance(x, dict) and x.get("title")
+        ]
+
+    raw_history = data.get("input_history", [])
+    if isinstance(raw_history, list):
+        INPUT_HISTORY = [str(x) for x in raw_history[-MAX_INPUT_HISTORY:]]
+
+    raw_snapshots = data.get("read_snapshots", {})
+    if isinstance(raw_snapshots, dict):
+        READ_SNAPSHOTS = {str(k): v for k, v in raw_snapshots.items() if isinstance(v, dict)}
+
+    UNDO_STACK = []
+    for item in data.get("undo_stack", []):
+        if not isinstance(item, dict):
+            continue
+        try:
+            p = resolve_path(str(item.get("path", "")), allow_missing=True, resolve_basename=False)
+            UNDO_STACK.append((p, bool(item.get("existed")), str(item.get("old", ""))))
+        except Exception:
+            pass
+
+    return cleaned, True
+
+
+# -----------------------------------------------------------------------------
+# V4 UI / diagnostics overrides
+# -----------------------------------------------------------------------------
+
+
+def print_banner() -> None:
+    width = terminal_width()
+    title = " HYPER-CUBE LOCAL CODING AGENT V4 "
+    inner = max(0, width - 2)
+    left = max(0, (inner - len(title)) // 2)
+    right = max(0, inner - len(title) - left)
+
+    print()
+    print(color("╭" + "─" * inner + "╮", C.CYAN))
+    print(
+        color("│", C.CYAN)
+        + " " * left
+        + color(title, C.BOLD, C.BRIGHT_CYAN)
+        + " " * right
+        + color("│", C.CYAN)
+    )
+    print(color("╰" + "─" * inner + "╯", C.CYAN))
+    status_line("project", str(PROJECT_ROOT), C.WHITE)
+    status_line("model", CURRENT_MODEL, C.BRIGHT_CYAN)
+    status_line("context", f"{CONTEXT_SIZE:,} · {CONTEXT_MODE}", C.WHITE)
+    status_line("compact", "auto" if AUTO_COMPACT_ENABLED else "manual/emergency", C.WHITE)
+    status_line("approval", APPROVAL_MODE, C.BRIGHT_YELLOW)
+    branch = get_git_branch()
+    if branch:
+        status_line("git branch", branch, C.WHITE)
+    print()
+
+
+def run_startup_diagnostics(session_resumed: bool) -> None:
+    RESOURCE_MONITOR.start()
+    # Give the first memory sample a moment to exist; do not delay materially.
+    time.sleep(0.03)
+
+    ui_header("STARTUP DIAGNOSTICS", C.BRIGHT_CYAN)
+    models = installed_models()
+    if models:
+        ui_success(f"Ollama connected  ·  {len(models)} model(s) installed")
+    else:
+        ui_error("Ollama unavailable or no installed models were returned")
+
+    if CURRENT_MODEL in models:
+        ui_success(f"Model found  ·  {CURRENT_MODEL}")
+    else:
+        ui_warn(f"Configured model not found in model list  ·  {CURRENT_MODEL}")
+
+    supports_tools, _caps = model_capabilities(CURRENT_MODEL) if CURRENT_MODEL in models else (None, [])
+    if supports_tools is True:
+        ui_success("Tool calling supported")
+    elif supports_tools is False:
+        ui_error("Model reports no tool-calling capability")
+    else:
+        ui_warn("Could not verify model tool capability")
+
+    if POWERSHELL_EXE:
+        ui_success(f"PowerShell  ·  {POWERSHELL_EXE}")
+    else:
+        ui_error("PowerShell was not found")
+
+    if git_available():
+        ui_success("Git available")
+    else:
+        ui_warn("Git unavailable; Git helpers will not work")
+
+    ui_success("Previous agent session resumed" if session_resumed else "New agent session")
+    ui_success(
+        f"Context engine  ·  {CONTEXT_SIZE:,} current / {effective_context_ceiling():,} adaptive ceiling"
+    )
+    ui_success(
+        f"Auto compact  ·  trigger ≈ {context_trigger_tokens():,} request tokens; keep ≈ {compact_keep_tokens():,}"
+    )
+
+    snap = RESOURCE_MONITOR.snapshot()
+    if snap.get("total"):
+        cpu = snap.get("cpu_avg")
+        ui_success(
+            "Resource monitor  ·  RAM "
+            + fmt_bytes(int(snap.get("available", 0)))
+            + " free / "
+            + fmt_bytes(int(snap.get("total", 0)))
+            + (f" · CPU {float(cpu):.0f}%" if cpu is not None else "")
+        )
+
+    if COMPACTED_MEMORY:
+        ui_success(
+            f"Compacted memory restored  ·  generation {COMPACTION_GENERATION} · ~{_rough_tokens(COMPACTED_MEMORY):,} tokens"
+        )
+    print()
+
+
+# -----------------------------------------------------------------------------
+# V4 Ollama stream override with full request accounting / better errors
+# -----------------------------------------------------------------------------
+
+
+def stream_ollama_chat(messages: List[Dict[str, Any]]) -> Dict[str, Any]:
+    global MODEL_HAS_RUN
+
+    request_messages = prepare_request_messages(messages)
+    payload = {
+        "model": CURRENT_MODEL,
+        "messages": request_messages,
+        "tools": TOOLS,
+        "stream": True,
+        "options": {
+            "num_ctx": CONTEXT_SIZE,
+            "temperature": TEMPERATURE,
+        },
+    }
+
+    req = urllib.request.Request(
+        CHAT_URL,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    spinner = Spinner("Model working")
+    spinner.start()
+    got_visible_text = False
+    saw_thinking = False
+    thinking_chars = 0
+    content_parts: List[str] = []
+    tool_calls: List[Dict[str, Any]] = []
+    seen_calls: set = set()
+    final_meta: Dict[str, Any] = {}
+
+    try:
+        with urllib.request.urlopen(req, timeout=600) as response:
+            for raw_line in response:
+                if not raw_line.strip():
+                    continue
+                chunk = json.loads(raw_line.decode("utf-8"))
+                message = chunk.get("message", {}) or {}
+
+                thinking_piece = message.get("thinking", "") or ""
+                if thinking_piece:
+                    saw_thinking = True
+                    thinking_chars += len(thinking_piece)
+                    if not got_visible_text:
+                        spinner.set_label("Model reasoning")
+
+                piece = message.get("content", "") or ""
+                if piece:
+                    if not got_visible_text:
+                        spinner.stop()
+                        if saw_thinking:
+                            print(
+                                color("  ◇ reasoning complete", C.BRIGHT_BLACK)
+                                + color(f"  ·  {thinking_chars:,} hidden chars", C.DIM)
+                            )
+                        print()
+                        sys.stdout.write(color("Agent  ❯ ", C.BOLD, C.BRIGHT_CYAN))
+                        sys.stdout.flush()
+                        got_visible_text = True
+                    sys.stdout.write(piece)
+                    sys.stdout.flush()
+                    content_parts.append(piece)
+
+                calls = message.get("tool_calls") or []
+                for call in calls:
+                    key = str(call.get("id")) if call.get("id") else json.dumps(call, sort_keys=True, ensure_ascii=False)
+                    if key not in seen_calls:
+                        seen_calls.add(key)
+                        tool_calls.append(call)
+
+                if chunk.get("done"):
+                    final_meta = chunk
+
+    except KeyboardInterrupt:
+        spinner.stop()
+        raise OperationCancelled("Model generation cancelled.")
+    except urllib.error.HTTPError as e:
+        spinner.stop()
+        try:
+            body = e.read().decode("utf-8", errors="replace")
+        except Exception:
+            body = str(e)
+        raise AgentError(f"Ollama HTTP {e.code}: {body}") from e
+    except urllib.error.URLError as e:
+        spinner.stop()
+        raise AgentError(
+            "Could not connect to Ollama at 127.0.0.1:11434. Make sure Ollama is running."
+        ) from e
+    finally:
+        spinner.stop()
+
+    MODEL_HAS_RUN = True
+    if got_visible_text:
+        print("\n")
+    elif saw_thinking:
+        print(
+            color("  ◇ reasoning complete", C.BRIGHT_BLACK)
+            + color(f"  ·  {thinking_chars:,} hidden chars", C.DIM)
+        )
+
+    return {
+        "message": {
+            "role": "assistant",
+            "content": "".join(content_parts),
+            "tool_calls": tool_calls,
+        },
+        "_meta": final_meta,
+    }
+
+
+# -----------------------------------------------------------------------------
+# V4 slash commands. Delegate all unchanged commands to V3 implementation.
+# -----------------------------------------------------------------------------
+
+_V3_SLASH_COMMAND = slash_command
+
+
+def slash_command(
+    text: str,
+    messages: List[Dict[str, Any]],
+) -> Tuple[str, List[Dict[str, Any]], Optional[str]]:
+    global AUTO_COMPACT_ENABLED, AUTO_CONTEXT_ENABLED
+    global CONTEXT_MODE, CONTEXT_SIZE, CONTEXT_USER_MAX, COMPACTED_MEMORY
+
+    parts = text.strip().split(maxsplit=1)
+    cmd = parts[0].lower()
+    arg = parts[1].strip() if len(parts) > 1 else ""
+
+    if cmd in {"/compact", "/summarize"}:
+        low = arg.lower()
+        if low in {"status", "stats"}:
+            print()
+            status_line("enabled", str(AUTO_COMPACT_ENABLED), C.WHITE)
+            status_line("generation", str(COMPACTION_GENERATION), C.WHITE)
+            status_line("count", str(COMPACTION_COUNT), C.WHITE)
+            status_line("summary", f"~{_rough_tokens(COMPACTED_MEMORY):,} tokens", C.WHITE)
+            status_line("trigger", f"~{context_trigger_tokens():,} request tokens", C.WHITE)
+            status_line("keep tail", f"~{compact_keep_tokens():,} tokens", C.WHITE)
+            print()
+            return "handled", messages, None
+        if low == "show":
+            print()
+            print(COMPACTED_MEMORY or "(no compacted memory yet)")
+            print()
+            return "handled", messages, None
+        if low in {"auto on", "on"}:
+            AUTO_COMPACT_ENABLED = True
+            save_config()
+            ui_success("Automatic compaction enabled")
+            return "handled", messages, None
+        if low in {"auto off", "off"}:
+            AUTO_COMPACT_ENABLED = False
+            save_config()
+            ui_warn("Automatic compaction disabled; emergency overflow recovery remains enabled")
+            return "handled", messages, None
+
+        messages = compact_session(messages, reason="manual /compact", force=True)
+        return "handled", messages, None
+
+    if cmd in {"/context", "/autocontext"}:
+        low = arg.lower()
+        if cmd == "/autocontext" and low in {"on", "off"}:
+            AUTO_CONTEXT_ENABLED = low == "on"
+            CONTEXT_MODE = "auto" if AUTO_CONTEXT_ENABLED else "fixed"
+            save_config()
+            ui_success(f"Adaptive context: {AUTO_CONTEXT_ENABLED}")
+            return "handled", messages, None
+
+        if not low or low in {"status", "show"}:
+            print()
+            for line in context_status_lines(messages):
+                print(color("  " + line, C.WHITE))
+            print()
+            return "handled", messages, None
+
+        if low == "auto" or low == "auto on":
+            AUTO_CONTEXT_ENABLED = True
+            CONTEXT_MODE = "auto"
+            save_config()
+            ui_success("Adaptive context enabled")
+            maybe_auto_tune_context(messages, allow_increase=True)
+            return "handled", messages, None
+
+        if low in {"auto off", "fixed"}:
+            AUTO_CONTEXT_ENABLED = False
+            CONTEXT_MODE = "fixed"
+            save_config()
+            ui_success(f"Context fixed at {CONTEXT_SIZE:,}")
+            return "handled", messages, None
+
+        if low.startswith("max "):
+            try:
+                CONTEXT_USER_MAX = max(CONTEXT_MIN, min(int(low.split()[1]), 32768))
+                save_config()
+                ui_success(f"Adaptive context maximum set to {CONTEXT_USER_MAX:,}")
+            except Exception:
+                ui_error("Usage: /context max 16384")
+            return "handled", messages, None
+
+        try:
+            value = max(CONTEXT_MIN, min(int(low), 32768))
+            CONTEXT_SIZE = value
+            CONTEXT_MODE = "fixed"
+            AUTO_CONTEXT_ENABLED = False
+            save_config()
+            ui_success(f"Context fixed at {CONTEXT_SIZE:,}")
+        except Exception:
+            ui_error("Usage: /context [status|auto|auto off|max N|N]")
+        return "handled", messages, None
+
+    if cmd == "/ctx":
+        if arg.lower() == "auto":
+            AUTO_CONTEXT_ENABLED = True
+            CONTEXT_MODE = "auto"
+            save_config()
+            ui_success("Adaptive context enabled")
+            return "handled", messages, None
+        try:
+            CONTEXT_SIZE = max(CONTEXT_MIN, min(int(arg), 32768))
+            AUTO_CONTEXT_ENABLED = False
+            CONTEXT_MODE = "fixed"
+            save_config()
+            ui_success(f"Context fixed at {CONTEXT_SIZE:,}")
+        except Exception:
+            ui_error("Usage: /ctx 8192 or /ctx auto")
+        return "handled", messages, None
+
+    if cmd == "/memory":
+        print()
+        status_line("checkpoint", f"generation {COMPACTION_GENERATION}", C.WHITE)
+        status_line("tokens", f"~{_rough_tokens(COMPACTED_MEMORY):,}", C.WHITE)
+        if COMPACTED_MEMORY:
+            print_rule("·", C.BRIGHT_BLACK)
+            print(COMPACTED_MEMORY)
+            print_rule("·", C.BRIGHT_BLACK)
+        else:
+            print(color("  No compacted session memory yet.", C.BRIGHT_BLACK))
+        print()
+        return "handled", messages, None
+
+    return _V3_SLASH_COMMAND(text, messages)
+
+
+# Add V4 commands to the displayed help string used by the delegated V3 /help.
+HELP_TEXT = HELP_TEXT.replace(
+    "/ctx <2048-32768>        Change context size",
+    "/ctx <N>|auto            Fix context size or enable adaptive context\n"
+    "/context [...]           Context status/auto/max controls\n"
+    "/compact                 Manually compact session memory\n"
+    "/compact status|show     Compaction status or checkpoint\n"
+    "/memory                  Show current compacted checkpoint",
+)
+
+
+# -----------------------------------------------------------------------------
+# V4 turn loop: preflight, auto compact, adaptive context, overflow recovery
+# -----------------------------------------------------------------------------
+
+
+def process_user_turn(
+    user_text: str,
+    messages: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    global TURN_TOOL_COUNT, LAST_USER_TEXT
+
+    TURN_TOOL_COUNT = 0
+    LAST_USER_TEXT = user_text
+    turn_start = time.time()
+    messages.append({"role": "user", "content": user_text})
+    save_session(messages)
+
+    final_meta: Dict[str, Any] = {}
+    overflow_recovered = False
+
+    for _step in range(MAX_TOOL_STEPS):
+        try:
+            messages = ensure_context_capacity(messages, reason="preflight")
+            save_session(messages)
+            response = stream_ollama_chat(messages)
+        except OperationCancelled:
+            double = register_interrupt()
+            if double:
+                abandon_current_task()
+                ui_warn("Task abandoned.")
+                messages.append({"role": "system", "content": "The user abandoned the previous task."})
+            else:
+                ui_warn(
+                    "Current generation cancelled. Press Ctrl+C again within "
+                    f"{CANCEL_DOUBLE_TAP_SECONDS:.1f}s to abandon the whole task."
+                )
+            save_session(messages)
+            return messages
+        except Exception as e:
+            if is_context_overflow_error(e) and not overflow_recovered:
+                overflow_recovered = True
+                ui_warn("Ollama reported context overflow. Compacting and retrying this step once.")
+                messages = compact_session(
+                    messages,
+                    reason="provider context-overflow recovery",
+                    force=True,
+                )
+                continue
+            print()
+            ui_error(str(e))
+            print()
+            save_session(messages)
+            return messages
+
+        message = response.get("message", {}) or {}
+        content = message.get("content", "") or ""
+        tool_calls = message.get("tool_calls") or []
+        final_meta = response.get("_meta", {}) or {}
+
+        assistant_message: Dict[str, Any] = {"role": "assistant", "content": content}
+        if tool_calls:
+            assistant_message["tool_calls"] = tool_calls
+        messages.append(assistant_message)
+
+        if not tool_calls:
+            # An idle boundary is a safe time to evaluate a possible future
+            # context increase without interrupting a tool trajectory.
+            maybe_auto_tune_context(messages, allow_increase=True)
+            elapsed = time.time() - turn_start
+            save_session(messages)
+            print_turn_footer(messages, elapsed, final_meta)
+            return messages
+
+        for call in tool_calls:
+            try:
+                name, result = execute_tool_call(call)
+            except OperationCancelled:
+                double = register_interrupt()
+                if double:
+                    abandon_current_task()
+                    ui_warn("Task abandoned.")
+                    messages.append({"role": "system", "content": "The user abandoned the previous task."})
+                else:
+                    ui_warn(
+                        "Current operation cancelled. Press Ctrl+C again quickly to abandon the whole task."
+                    )
+                save_session(messages)
+                return messages
+
+            messages.append(build_tool_message(call, name, result))
+            save_session(messages)
+
+        # Do not wait for the next user turn. Long same-turn tool trajectories
+        # are exactly where coding harnesses most often hit the context wall.
+        messages = ensure_context_capacity(messages, reason="after tool results")
+        save_session(messages)
+
+    ui_warn(f"Stopped after {MAX_TOOL_STEPS} tool steps to prevent an infinite loop.")
+    save_session(messages)
+    return messages
+
+
 def run_agent() -> None:
     global LAST_INTERRUPT_TIME
 
@@ -3332,7 +4900,7 @@ def run_agent() -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Hyper-Cube Local Coding Agent V3 for Ollama."
+        description="Hyper-Cube Local Coding Agent V4 for Ollama."
     )
     parser.add_argument(
         "--model",
@@ -3364,7 +4932,7 @@ def main() -> None:
     args = parser.parse_args()
 
     global PROJECT_ROOT, AGENT_DIR, CONFIG_PATH, SESSION_PATH, REPO_MAP_PATH
-    global CURRENT_MODEL, CONTEXT_SIZE, TEMPERATURE, RESUME_ENABLED, POWERSHELL_EXE
+    global CURRENT_MODEL, CONTEXT_SIZE, TEMPERATURE, RESUME_ENABLED, POWERSHELL_EXE, CONTEXT_MODE, AUTO_CONTEXT_ENABLED
 
     PROJECT_ROOT = Path(args.project).resolve()
     if not PROJECT_ROOT.exists() or not PROJECT_ROOT.is_dir():
@@ -3386,7 +4954,9 @@ def main() -> None:
     if args.model:
         CURRENT_MODEL = args.model
     if args.ctx is not None:
-        CONTEXT_SIZE = max(2048, min(int(args.ctx), 32768))
+        CONTEXT_SIZE = max(CONTEXT_MIN, min(int(args.ctx), 32768))
+        CONTEXT_MODE = "fixed"
+        AUTO_CONTEXT_ENABLED = False
     if args.temperature is not None:
         TEMPERATURE = max(0.0, min(float(args.temperature), 2.0))
     if args.no_resume:
@@ -3394,7 +4964,7 @@ def main() -> None:
 
     POWERSHELL_EXE = detect_powershell()
 
-    # Persistent state folder is a deliberate V3 feature.
+    # Persistent state folder is used by the V4 harness.
     try:
         ensure_agent_dir()
     except Exception as e:
@@ -3418,6 +4988,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-
 
