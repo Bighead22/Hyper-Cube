@@ -1135,3 +1135,56 @@ slot   operator(): id  0 | task 1901 | erased invalidated context checkpoint (po
 slot   operator(): id  0 | task 1901 | erased invalidated context checkpoint (pos_min = 3980, pos_max = 3980, n_tokens = 3981, n_swa = 0, pos_next = 0, size = 50.251 MiB)
 slot   operator(): id  0 | task 1901 | erased invalidated context checkpoint (pos_min = 5000, pos_max = 5000, n_tokens = 5001, n_swa = 0, pos_next = 0, size = 50.251 MiB)
 slot   operator(): id  0 | task 1901 | cached n_tokens = 0, memory_seq_rm [0, end)
+slot print_timing: id  0 | task 1901 | prompt processing, n_tokens =    632, progress = 0.99, t =  15.31 s / 41.29 tokens per second
+slot   operator(): id  0 | task 1901 | cached n_tokens = 632, memory_seq_rm [632, end)
+slot init_sampler: id  0 | task 1901 | init sampler, took 1.32 ms, tokens: text = 636, total = 636
+slot create_check: id  0 | task 1901 | created context checkpoint 1 of 32 (pos_min = 631, pos_max = 631, n_tokens = 632, size = 50.251 MiB)
+slot print_timing: id  0 | task 1901 | n_gen =    100, tg =   3.81 t/s, tg_3s =   3.85 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    111, tg =   3.79 t/s, tg_3s =   3.63 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    123, tg =   3.81 t/s, tg_3s =   3.93 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    135, tg =   3.82 t/s, tg_3s =   3.96 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    147, tg =   3.83 t/s, tg_3s =   3.93 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    159, tg =   3.83 t/s, tg_3s =   3.92 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    171, tg =   3.84 t/s, tg_3s =   3.98 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    183, tg =   3.85 t/s, tg_3s =   3.91 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    195, tg =   3.85 t/s, tg_3s =   3.83 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    207, tg =   3.85 t/s, tg_3s =   3.92 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    219, tg =   3.85 t/s, tg_3s =   3.80 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    227, tg =   3.76 t/s, tg_3s =   2.31 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    237, tg =   3.73 t/s, tg_3s =   3.18 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    249, tg =   3.74 t/s, tg_3s =   3.86 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    261, tg =   3.73 t/s, tg_3s =   3.67 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    272, tg =   3.71 t/s, tg_3s =   3.30 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    279, tg =   3.64 t/s, tg_3s =   2.04 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    289, tg =   3.62 t/s, tg_3s =   3.26 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    300, tg =   3.62 t/s, tg_3s =   3.58 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    311, tg =   3.62 t/s, tg_3s =   3.42 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    320, tg =   3.58 t/s, tg_3s =   2.73 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    330, tg =   3.57 t/s, tg_3s =   3.28 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    339, tg =   3.53 t/s, tg_3s =   2.52 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    344, tg =   3.46 t/s, tg_3s =   1.46 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    350, tg =   3.42 t/s, tg_3s =   1.97 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    356, tg =   3.37 t/s, tg_3s =   1.86 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    364, tg =   3.34 t/s, tg_3s =   2.42 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    371, tg =   3.30 t/s, tg_3s =   1.99 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    376, tg =   3.25 t/s, tg_3s =   1.61 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    382, tg =   3.21 t/s, tg_3s =   1.75 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    390, tg =   3.19 t/s, tg_3s =   2.53 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    399, tg =   3.19 t/s, tg_3s =   2.95 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    409, tg =   3.18 t/s, tg_3s =   2.91 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    415, tg =   3.15 t/s, tg_3s =   1.96 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    422, tg =   3.13 t/s, tg_3s =   2.27 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    430, tg =   3.11 t/s, tg_3s =   2.45 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    437, tg =   3.09 t/s, tg_3s =   2.14 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    446, tg =   3.08 t/s, tg_3s =   2.78 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    456, tg =   3.08 t/s, tg_3s =   3.03 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    465, tg =   3.08 t/s, tg_3s =   2.91 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    476, tg =   3.09 t/s, tg_3s =   3.58 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    488, tg =   3.11 t/s, tg_3s =   3.90 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    499, tg =   3.11 t/s, tg_3s =   3.58 t/s
+slot print_timing: id  0 | task 1901 | n_gen =    511, tg =   3.13 t/s, tg_3s =   3.74 t/s
+[GIN] 2026/10/08 - 10:28:42 | 500 |          3m2s |       127.0.0.1 | POST     "/api/chat"
+slot print_timing: id  0 | task 1901 | n_gen =    523, tg =   3.13 t/s, tg_3s =   3.48 t/s
+srv          stop: cancel task, id_task = 1901
+slot      release: id  0 | task 1901 | stop processing: n_tokens = 1159, truncated = 0
+srv  update_slots: all slots are idle
