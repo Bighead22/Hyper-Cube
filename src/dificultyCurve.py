@@ -6,7 +6,7 @@ import enemyStats
 import dificultyCurve
 import stats
 
-#(10sin(0.2x)+2x)-25
+#((10sin(0.2x)+2x)-25)x/500
 
 def difficulty(time):
-    return ((10*math.sin((0.2*time))) + 2*time)-25
+    return (((10*math.sin((0.2*time))) + 2*time)-25)*time/500

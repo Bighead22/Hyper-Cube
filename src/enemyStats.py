@@ -7,11 +7,13 @@ import dificultyCurve
 import playerStats
 
 enemyStats.enemyspawnCD = (10)*30 # lower number for faster spawn higher number for slower spawn chang number in ()
-enemyStats.enemyCountCD = 1
 enemyStats.enemyCount = 1 # Change this to add more enemies
+enemyStats.maxEnemyCount = 1
 enemyStats.eDrag = 0.99
 enemyStats.enemyType = 1
 enemyStats.enemyHpMultiplier = 1
+enemyStats.speedMultiplier = 1
+enemyStats.readyToSpawn = True
 
 enemyStats.enemies = []
     # Spawn the enemies based on the initial enemy count

@@ -72,9 +72,9 @@ def screenWraping(app):
 def onStep(app):
     stats.score += 1/app.stepsPerSecond
     stats.time += 1/app.stepsPerSecond
-    print(dificultyCurve.difficulty(stats.time+7.52))
+    print(dificultyCurve.difficulty(stats.time+43))
     while len(enemyStats.enemies) < enemyStats.enemyCount:
-        enemyStats.enemies.append({'x': random.randint(0, 1000),'y': 1000,'hp': random.randint(100, 200) * enemyStats.enemyHpMultiplier,'vx': 0,'vy': 0,'angle': 0,'size': 10, 'type' : random.randint(1,2), 'speed' : 0.75})
+        enemyStats.enemies.append({'x': random.randint(0, 1000),'y': 1000,'hp': random.randint(100, 200) * enemyStats.enemyHpMultiplier,'vx': 0,'vy': 0,'angle': 0,'size': 10, 'type' : random.randint(1,2), 'speed' : 0.75*enemyStats.speedMultiplier})
     for enemy in enemyStats.enemies:
         if enemy['type'] == 1:
             enemy['size'] = 15
@@ -83,9 +83,9 @@ def onStep(app):
             enemy['size'] = 5
             enemy['speed'] = 1.25
 
-    enemyStats.enemyCountCD += 1
-    if enemyStats.enemyCountCD % enemyStats.enemyspawnCD == 0:
+    if dificultyCurve.difficulty(stats.time+43) > (enemyStats.maxEnemyCount*5):
         enemyStats.enemyCount += 1
+        enemyStats.maxEnemyCount += 1
     
     playerStats.hp += playerStats.maxHp/playerStats.hpRegen
     if playerStats.hp > playerStats.maxHp:
@@ -265,8 +265,8 @@ def redrawAll(app):
     drawRect(10, 10, playerStats.maxHp*2+4, 24, fill=rgb(255, 255, 255))
     drawRect(12, 12, playerStats.hp*2, 20, fill='lime')
     # UI: Mag
-    drawRect(10, 44, playerStats.maxMag*10+4, 24, fill=playerStats.magI)
-    drawRect(12, 46, playerStats.mag*10, 20, fill='teal')
+    drawRect(10, 44, playerStats.maxMag*5+4, 24, fill=playerStats.magI)
+    drawRect(12, 46, playerStats.mag*5, 20, fill='teal')
     #UI:
     #Money
     drawLabel(stats.coins, 10,980, size=20,fill = rgb(255,255,255))

@@ -1,9 +1,16 @@
 {
-  "version": "3.0",
+  "version": "5.0",
   "model": "qwen3.5:4b",
-  "context": 8192,
+  "context": 6144,
   "temperature": 0.2,
   "approval_mode": "full",
   "verbose_tools": false,
-  "resume": true
+  "resume": true,
+  "auto_compact": true,
+  "auto_context": true,
+  "context_mode": "auto",
+  "context_max": 32768,
+  "keep_alive": -1,
+  "warm_model_on_start": true,
+  "release_model_on_exit": true
 }
