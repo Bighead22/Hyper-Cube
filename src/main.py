@@ -72,9 +72,11 @@ def screenWraping(app):
 def onStep(app):
     stats.score += 1/app.stepsPerSecond
     stats.time += 1/app.stepsPerSecond
+    enemyStats.enemyHpMultiplier = dificultyCurve.difficulty(stats.time+43)/20
+    enemyStats.speedMultiplier = dificultyCurve.difficulty(stats.time+43)/20
     print(dificultyCurve.difficulty(stats.time+43))
     while len(enemyStats.enemies) < enemyStats.enemyCount:
-        enemyStats.enemies.append({'x': random.randint(0, 1000),'y': 1000,'hp': random.randint(100, 200) * enemyStats.enemyHpMultiplier,'vx': 0,'vy': 0,'angle': 0,'size': 10, 'type' : random.randint(1,2), 'speed' : 0.75*enemyStats.speedMultiplier})
+        enemyStats.enemies.append({'x': random.randint(0, 1000),'y': 1000,'hp': random.randint(100, 200)*enemyStats.enemyHpMultiplier,'vx': 0,'vy': 0,'angle': 0,'size': 10, 'type' : random.randint(1,2), 'speed' : 0.75*enemyStats.speedMultiplier})
     for enemy in enemyStats.enemies:
         if enemy['type'] == 1:
             enemy['size'] = 15
@@ -83,9 +85,9 @@ def onStep(app):
             enemy['size'] = 5
             enemy['speed'] = 1.25
 
-    if dificultyCurve.difficulty(stats.time+43) > (enemyStats.maxEnemyCount*5):
-        enemyStats.enemyCount += 1
-        enemyStats.maxEnemyCount += 1
+    if dificultyCurve.difficulty(stats.time+43) > (enemyStats.maxEnemyCount*2):
+        enemyStats.enemyCount += 2
+        enemyStats.maxEnemyCount += 2
     
     playerStats.hp += playerStats.maxHp/playerStats.hpRegen
     if playerStats.hp > playerStats.maxHp:
