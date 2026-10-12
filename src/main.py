@@ -16,6 +16,9 @@ app.setMaxShapeCount(160000)
 
 def onAppStart(app):
 
+    #app.url = 'images/dUpgrade.png'
+    #drawImage(app.url, 50, 100, width = 200, height = 200,)
+
     app.stepsPerSecond = 60
 
 def onMousePress(app, mouseX, mouseY):
@@ -74,7 +77,7 @@ def onStep(app):
     stats.time += 1/app.stepsPerSecond
     enemyStats.enemyHpMultiplier = dificultyCurve.difficulty(stats.time+43)/20
     enemyStats.speedMultiplier = dificultyCurve.difficulty(stats.time+43)/20
-    print(dificultyCurve.difficulty(stats.time+43))
+    
     while len(enemyStats.enemies) < enemyStats.enemyCount:
         enemyStats.enemies.append({'x': random.randint(0, 1000),'y': 1000,'hp': random.randint(100, 200)*enemyStats.enemyHpMultiplier,'vx': 0,'vy': 0,'angle': 0,'size': 10, 'type' : random.randint(1,2), 'speed' : 0.75*enemyStats.speedMultiplier})
     for enemy in enemyStats.enemies:
@@ -236,6 +239,7 @@ def trail(app):
                 n += 1
             
 def redrawAll(app):
+
     drawRect(0, 0, 1000, 1000, fill=rgb(0, 5, 20))
     
     for bullet in playerStats.bullets:
