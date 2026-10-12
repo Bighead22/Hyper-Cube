@@ -11,6 +11,7 @@ import logicFunctions
 import enemyStats
 import playerStats
 import dificultyCurve
+import upgrades
 
 app.setMaxShapeCount(160000)
 
@@ -53,6 +54,17 @@ def onMousePress(app, mouseX, mouseY):
 def onKeyPress(app, key):
     if key == 'r':
         playerStats.reloading = True
+    if key == 's' and upgrades.pause:
+        upgrades.pause = False
+        upgrades.uV = True
+        app.stepsPerSecond = 0.0000001
+    else:
+        upgrades.pause = True
+        upgrades.uV = False
+        app.stepsPerSecond = 60
+
+    
+
     
 def onMouseMove(app, mouseX, mouseY):
     stats.mouseX = mouseX
@@ -277,6 +289,11 @@ def redrawAll(app):
     #Money
     drawLabel(stats.coins, 10,980, size=20,fill = rgb(255,255,255))
     
+    #Upgrades
+    drawImage(upgrades.bulletU, 41, 250, width=250, height=250, visible = upgrades.uV)
+    drawImage(upgrades.bulletU, 41+83+250, 250, width=250, height=250, visible = upgrades.uV)
+    drawImage(upgrades.bulletU, 41+83+250+83+250, 250, width=250, height=250, visible = upgrades.uV)
+
     # Game over
     if stats.gameOverL:
         drawLabel(stats.gameOverL, 500, 500, size=50, fill=rgb(255, 0, 0), bold=True, border=rgb(255, 255, 255), borderWidth=1)

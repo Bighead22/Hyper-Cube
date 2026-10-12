@@ -18,6 +18,19 @@ upgrades.speedU = 'images/speed.png'
 upgrades.moneyOrLuckU = 'images/moneyOrLuck.png'
 upgrades.luck = 1
 upgrades.moneyMultiplyer = 1
+upgrades.pause = True
+upgrades.uV = False
+
+upgrades.type = []
+for i in range(3):
+    upgrades.type.append({'bulletU' : upgrades.bulletU,
+    'bulletSpeedU' : upgrades.bulletSpeedU,
+    'damageOrSizeU' : upgrades.damageOrSizeU,
+    'hpOrRegenU' : upgrades.hpOrRegenU,
+    'reloadOrMagU' : upgrades.reloadOrMagU,
+    'speedU' : upgrades.speedU,
+    'moneyOrLuckU' : upgrades.moneyOrLuckU,
+    })
 
 def rarity():
     rarities = ['common', 'uncommon', 'rare', 'epic', 'legendary']
