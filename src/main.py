@@ -23,6 +23,11 @@ def onAppStart(app):
     app.stepsPerSecond = 60
 
 def onMousePress(app, mouseX, mouseY):
+    if upgrades.uV:
+        upgrades.handleClick(mouseX, mouseY)
+        return
+    if stats.gameOverL:
+        return
     if playerStats.mag != 0.05:
         dx = mouseX - playerStats.playerX
         dy = mouseY - playerStats.playerY
@@ -52,20 +57,18 @@ def onMousePress(app, mouseX, mouseY):
         playerStats.mag = 0.05
 
 def onKeyPress(app, key):
-    if key == 'r':
+    if stats.gameOverL:
+        return
+    if key == 's':
+        if upgrades.uV:
+            upgrades.closeShop()
+        else:
+            upgrades.openShop()
+    elif key == 'e' and upgrades.uV:
+        upgrades.reroll()
+    elif key == 'r' and not upgrades.uV:
         playerStats.reloading = True
-    if key == 's' and upgrades.pause:
-        upgrades.pause = False
-        upgrades.uV = True
-        app.stepsPerSecond = 0.0000001
-    else:
-        upgrades.pause = True
-        upgrades.uV = False
-        app.stepsPerSecond = 60
 
-    
-
-    
 def onMouseMove(app, mouseX, mouseY):
     stats.mouseX = mouseX
     stats.mouseY = mouseY
@@ -85,20 +88,14 @@ def screenWraping(app):
         if enemy['y'] > 1000: enemy['y'] = 0
     
 def onStep(app):
+    if upgrades.uV or stats.gameOverL:
+        return
     stats.score += 1/app.stepsPerSecond
     stats.time += 1/app.stepsPerSecond
     enemyStats.enemyHpMultiplier = dificultyCurve.difficulty(stats.time+43)/20
-    enemyStats.speedMultiplier = dificultyCurve.difficulty(stats.time+43)/20
     
     while len(enemyStats.enemies) < enemyStats.enemyCount:
-        enemyStats.enemies.append({'x': random.randint(0, 1000),'y': 1000,'hp': random.randint(100, 200)*enemyStats.enemyHpMultiplier,'vx': 0,'vy': 0,'angle': 0,'size': 10, 'type' : random.randint(1,2), 'speed' : 0.75*enemyStats.speedMultiplier})
-    for enemy in enemyStats.enemies:
-        if enemy['type'] == 1:
-            enemy['size'] = 15
-            enemy['speed'] = 0.75
-        if enemy['type'] == 2:
-            enemy['size'] = 5
-            enemy['speed'] = 1.25
+        enemyStats.spawnEnemy(playerStats.playerX, playerStats.playerY, enemyStats.enemyHpMultiplier)
 
     if dificultyCurve.difficulty(stats.time+43) > (enemyStats.maxEnemyCount*2):
         enemyStats.enemyCount += 2
@@ -136,14 +133,32 @@ def onStep(app):
 
     # Enemy logic - Loop through all enemies
     for enemy in enemyStats.enemies:
-        ex = (playerStats.playerX) - enemy['x']
-        ey = (playerStats.playerY) - enemy['y']
+        cfg = enemyStats.types[enemy['type']]
 
+        # Newly spawned enemies just fade in and sit still
+        if enemy['spawn'] > 0:
+            enemy['spawn'] -= 1
+            continue
+
+        ex = playerStats.playerX - enemy['x']
+        ey = playerStats.playerY - enemy['y']
         eAngle = math.atan2(ey, ex)
-        enemy['vx'] += math.cos(eAngle) * enemy['speed']
-        enemy['vy'] += math.sin(eAngle) * enemy['speed']
+        enemy['angle'] = math.degrees(eAngle)
 
-        enemy['angle'] = math.degrees(math.atan2(ey, ex))
+        # Only steer toward the player when not stunned from a recent hit
+        if enemy['stun'] > 0:
+            enemy['stun'] -= 1
+        else:
+            enemy['vx'] += math.cos(eAngle) * cfg['accel']
+            enemy['vy'] += math.sin(eAngle) * cfg['accel']
+
+        # Soft speed cap (knockback can briefly exceed it, then eases back down)
+        spd = math.hypot(enemy['vx'], enemy['vy'])
+        if spd > cfg['maxSpeed']:
+            f = max(cfg['maxSpeed'] / spd, 0.85)
+            enemy['vx'] *= f
+            enemy['vy'] *= f
+
         enemy['x'] += enemy['vx']
         enemy['y'] += enemy['vy']
         enemy['vx'] *= enemyStats.eDrag
@@ -160,8 +175,8 @@ def onStep(app):
         for enemy in enemyStats.enemies:
             if logicFunctions.isColiding(app, bullet['x'], bullet['y'], enemy['x'], enemy['y'], playerStats.bulletSize + enemy['size'] + 10):
                 enemy['hp'] -= playerStats.bulletDamage
-                enemy['vx'] += bullet['vx'] * playerStats.recoil*1.3
-                enemy['vy'] += bullet['vy'] * playerStats.recoil*1.3
+                enemy['vx'] += bullet['vx'] * 0.2
+                enemy['vy'] += bullet['vy'] * 0.2
                 hit = True
                 
                 # Enemy death/respawn
@@ -170,9 +185,9 @@ def onStep(app):
                     enemyStats.enemyCount -= 1
                     stats.score += 10
                     if enemy['type'] == 1:
-                        stats.coins += 3
+                        stats.coins += 5 * upgrades.moneyMultiplyer
                     if enemy['type'] == 2:
-                        stats.coins += 5
+                        stats.coins += 7.5 * upgrades.moneyMultiplyer
                 break # Bullet disappears after hitting one enemy
                 
         if not hit and 0 <= bullet['x'] <= 1000 and 0 <= bullet['y'] <= 1000:
@@ -182,43 +197,56 @@ def onStep(app):
     
     screenWraping(stats)
     
+    # Enemy vs enemy: gently push apart so they spread out instead of stacking
     for i in range(len(enemyStats.enemies)):
         for j in range(i + 1, len(enemyStats.enemies)):
             e1 = enemyStats.enemies[i]
             e2 = enemyStats.enemies[j]
-            
-            if logicFunctions.isColiding(app, e1['x'], e1['y'], e2['x'], e2['y'], 20):
-                # Reverse their directions to bounce
-                e1['vx'] *= -1
-                e1['vy'] *= -1
-                e2['vx'] *= -1
-                e2['vy'] *= -1
-                
-                # Optionally push them slightly apart so they don't get stuck together
-                e1['x'] += e1['vx']
-                e2['x'] += e2['vx']
-    
-    # Player vs Enemy collisions
+            if e1['spawn'] > 0 or e2['spawn'] > 0:
+                continue
+            dx = e2['x'] - e1['x']
+            dy = e2['y'] - e1['y']
+            d = math.hypot(dx, dy)
+            minD = e1['size'] + e2['size'] + 10
+            if d < minD:
+                if d == 0:
+                    dx, dy, d = random.random() - 0.5, random.random() - 0.5, 1
+                push = (minD - d) / 2
+                nx, ny = dx / d, dy / d
+                e1['x'] -= nx * push
+                e1['y'] -= ny * push
+                e2['x'] += nx * push
+                e2['y'] += ny * push
+
+    # Player vs Enemy: fixed damage per hit, then brief invulnerability + knockback
+    if enemyStats.playerInvuln > 0:
+        enemyStats.playerInvuln -= 1
+
     for enemy in enemyStats.enemies:
-            
+        if enemy['spawn'] > 0:
+            continue
         if logicFunctions.isColiding(app, playerStats.playerX, playerStats.playerY, enemy['x'], enemy['y'], enemy['size'] + 5):
-            playerStats.playerXSpeed += enemy['vx']
-            playerStats.playerYSpeed += enemy['vy']
-            enemy['vx'] -= playerStats.playerXSpeed*0.75
-            enemy['vy'] -= playerStats.playerYSpeed*0.75
-            
-            impact = math.hypot(math.hypot(enemy['vx'], playerStats.playerXSpeed), math.hypot(enemy['vy'], playerStats.playerYSpeed))/2
-            temp = playerStats.hp - impact
-            
-            if temp > 0:
-                playerStats.hp -= impact
-            else:
-                playerStats.hp = 0.01
-    
+            if enemyStats.playerInvuln > 0:
+                continue
+            cfg = enemyStats.types[enemy['type']]
+            dx = playerStats.playerX - enemy['x']
+            dy = playerStats.playerY - enemy['y']
+            d = math.hypot(dx, dy) or 1
+            nx, ny = dx / d, dy / d
+
+            playerStats.hp = max(0.01, playerStats.hp - playerStats.maxHp * cfg['damage'])
+            enemyStats.playerInvuln = enemyStats.playerIFrames
+
+            # Shove both apart; enemy pauses its chase briefly
+            playerStats.playerXSpeed += nx * enemyStats.knockback
+            playerStats.playerYSpeed += ny * enemyStats.knockback
+            enemy['vx'] = -nx * enemyStats.knockback
+            enemy['vy'] = -ny * enemyStats.knockback
+            enemy['stun'] = enemyStats.hitStun
+
     if playerStats.hp <= 0.01:
         playerStats.hp = 0.01
         stats.gameOverL = 'You lost the game'
-        app.stepsPerSecond = 0.0000001
 
 def trail(app):
     # Player trail
@@ -231,6 +259,8 @@ def trail(app):
 
     # Enemy trails
     for enemy in enemyStats.enemies:
+        if enemy['spawn'] > 0:
+            continue
         if enemy['type'] == 1:
             i = 0
             j= 3
@@ -250,6 +280,30 @@ def trail(app):
                 j -= 0.5
                 n += 1
             
+def drawShop(app):
+    if not upgrades.uV:
+        return
+    drawRect(0, 0, 1000, 1000, fill='black', opacity=65)
+    drawLabel('UPGRADES', 500, 110, size=40, fill='white', bold=True)
+    drawLabel(f'Coins: {int(stats.coins)}', 500, 155, size=22, fill=rgb(255, 220, 0), bold=True)
+    drawLabel(f'Click a card to buy   |   E: reroll ({upgrades.rerollCost} coins)   |   S: close', 500, 190, size=18, fill='white')
+    for i, choice in enumerate(upgrades.currentChoices):
+        if choice is None:
+            continue
+        x, y, w, h = upgrades.cardRect(i)
+        color = rgb(*upgrades.rarityColors[choice['rarity']])
+        drawRect(x - 8, y - 8, w + 16, h + 165, fill=rgb(15, 15, 30), border=color, borderWidth=4)
+        drawImage(choice['image'], x, y, width=w, height=h)
+        drawLabel(choice['rarity'].upper(), x + w/2, y + h + 20, size=16, fill=color, bold=True)
+        drawLabel(choice['name'], x + w/2, y + h + 46, size=22, fill='white', bold=True)
+        for j, line in enumerate(choice['lines']):
+            drawLabel(line, x + w/2, y + h + 72 + j*20, size=16, fill=rgb(200, 255, 200))
+        afford = stats.coins >= choice['cost']
+        drawLabel(f"Cost: {choice['cost']}", x + w/2, y + h + 145, size=18, bold=True,
+                  fill=rgb(0, 255, 0) if afford else rgb(255, 80, 80))
+    if upgrades.message:
+        drawLabel(upgrades.message, 500, 740, size=24, fill='white', bold=True)
+
 def redrawAll(app):
 
     drawRect(0, 0, 1000, 1000, fill=rgb(0, 5, 20))
@@ -267,18 +321,18 @@ def redrawAll(app):
     drawRect(playerStats.playerX - playerStats.playerXSpeed * 0.5-5, playerStats.playerY - playerStats.playerYSpeed * 0.5-5, 10, 10, fill=rgb(255, 0, 0), opacity=10, border=rgb(255, 255, 255), borderWidth=1, rotateAngle=playerStats.playerAngle)
     
     # Player
-    drawRect(playerStats.playerX, playerStats.playerY, 10, 10, fill=rgb(255, 0, 0), border=rgb(255, 255, 255), borderWidth=1, align='center', rotateAngle=playerStats.playerAngle)
+    drawRect(playerStats.playerX, playerStats.playerY, 10, 10, fill=rgb(255, 0, 0), border=rgb(255, 255, 255), borderWidth=1, align='center', rotateAngle=playerStats.playerAngle, opacity=(35 if enemyStats.playerInvuln % 8 < 4 and enemyStats.playerInvuln > 0 else 100))
 
     # Enemies
     for enemy in enemyStats.enemies:
+        eo = 30 if enemy['spawn'] > 0 else 100   # faded while spawning in
         if enemy['type'] == 1:
-            drawStar(enemy['x'], enemy['y'], enemy['size'] + 5, 3, fill=rgb(255, 255, 0), border=rgb(255, 255, 255), borderWidth=1, roundness=50, rotateAngle=enemy['angle']-90)
+            drawStar(enemy['x'], enemy['y'], enemy['size'] + 5, 3, fill=rgb(255, 255, 0), border=rgb(255, 255, 255), borderWidth=1, roundness=50, rotateAngle=enemy['angle']-90, opacity=eo)
             drawRect(enemy['x'], enemy['y'] + 20, enemy['hp']*0.2, 3, fill=rgb(0, 255, 0), align='center')
         if enemy['type'] == 2:
-            drawRegularPolygon(enemy['x'], enemy['y'], enemy['size'] + 5, 6, fill=rgb(255, 0, 255), border=rgb(255, 255, 255), borderWidth=1, rotateAngle=enemy['angle']-90)
+            drawRegularPolygon(enemy['x'], enemy['y'], enemy['size'] + 5, 6, fill=rgb(255, 0, 255), border=rgb(255, 255, 255), borderWidth=1, rotateAngle=enemy['angle']-90, opacity=eo)
             drawRect(enemy['x'], enemy['y'] + 20, enemy['hp']*0.2, 3, fill=rgb(0, 255, 0), align='center')
 
-        
     # UI: Health
     drawRect(10, 10, playerStats.maxHp*2+4, 24, fill=rgb(255, 255, 255))
     drawRect(12, 12, playerStats.hp*2, 20, fill='lime')
@@ -287,12 +341,10 @@ def redrawAll(app):
     drawRect(12, 46, playerStats.mag*5, 20, fill='teal')
     #UI:
     #Money
-    drawLabel(stats.coins, 10,980, size=20,fill = rgb(255,255,255))
+    drawLabel(int(stats.coins), 10,980, size=20,fill = rgb(255,255,255))
     
-    #Upgrades
-    drawImage(upgrades.bulletU, 41, 250, width=250, height=250, visible = upgrades.uV)
-    drawImage(upgrades.bulletU, 41+83+250, 250, width=250, height=250, visible = upgrades.uV)
-    drawImage(upgrades.bulletU, 41+83+250+83+250, 250, width=250, height=250, visible = upgrades.uV)
+    drawLabel('S: upgrades', 990, 980, size=16, fill=rgb(255,255,255), align='right')
+    drawShop(app)
 
     # Game over
     if stats.gameOverL:
