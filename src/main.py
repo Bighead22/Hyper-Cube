@@ -17,9 +17,6 @@ app.setMaxShapeCount(160000)
 
 def onAppStart(app):
 
-    #app.url = 'images/dUpgrade.png'
-    #drawImage(app.url, 50, 100, width = 200, height = 200,)
-
     app.stepsPerSecond = 60
 
 def onMousePress(app, mouseX, mouseY):
@@ -328,10 +325,10 @@ def redrawAll(app):
         eo = 30 if enemy['spawn'] > 0 else 100   # faded while spawning in
         if enemy['type'] == 1:
             drawStar(enemy['x'], enemy['y'], enemy['size'] + 5, 3, fill=rgb(255, 255, 0), border=rgb(255, 255, 255), borderWidth=1, roundness=50, rotateAngle=enemy['angle']-90, opacity=eo)
-            drawRect(enemy['x'], enemy['y'] + 20, enemy['hp']*0.2, 3, fill=rgb(0, 255, 0), align='center')
+            drawRect(enemy['x'], enemy['y'] + 20, (enemy['hp'])*(0.2/enemyStats.enemyHpMultiplier), 3, fill=rgb(0, 255, 0), align='center')
         if enemy['type'] == 2:
             drawRegularPolygon(enemy['x'], enemy['y'], enemy['size'] + 5, 6, fill=rgb(255, 0, 255), border=rgb(255, 255, 255), borderWidth=1, rotateAngle=enemy['angle']-90, opacity=eo)
-            drawRect(enemy['x'], enemy['y'] + 20, enemy['hp']*0.2, 3, fill=rgb(0, 255, 0), align='center')
+            drawRect(enemy['x'], enemy['y'] + 20, (enemy['hp'])*(0.2/enemyStats.enemyHpMultiplier), 3, fill=rgb(0, 255, 0), align='center')
 
     # UI: Health
     drawRect(10, 10, playerStats.maxHp*2+4, 24, fill=rgb(255, 255, 255))
