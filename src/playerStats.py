@@ -1,12 +1,9 @@
 from cmu_graphics import *
-import math
-import random
-import logicFunctions
-import enemyStats
-import dificultyCurve
 import playerStats
+import math
 
 
+playerStats.playerType = 1
 playerStats.playerAngle = 0
 playerStats.playerX = 375
 playerStats.playerY = 375
@@ -32,3 +29,13 @@ playerStats.reload = 0
 playerStats.reloadSpeed = 100
 playerStats.reloading = False
 playerStats.magI = rgb(255,255,255)
+
+def player1(x,y,r,o):
+    drawRect(x,y,12,12,fill=rgb(255, 0, 0), rotateAngle=r, opacity=o,border=rgb(255, 255, 255), borderWidth=1,align='center')
+    drawRegularPolygon(x,y,2,100,fill=rgb(255, 255, 255), rotateAngle=r, opacity=o,border=rgb(255, 255, 255), borderWidth=1)
+def player2(x,y,r,o):
+    drawRegularPolygon(x,y,6*math.sqrt(2),6,fill=rgb(0, 255, 0), rotateAngle=r, opacity=o,border=rgb(255, 255, 255), borderWidth=1)
+    drawRegularPolygon(x,y,3,4,fill=rgb(255, 255, 255), rotateAngle=r, opacity=o,border=rgb(255, 255, 255), borderWidth=1)
+def player3(x,y,r,o):
+    drawRegularPolygon(x,y,7*math.sqrt(2),3,fill=rgb(0, 0, 255), rotateAngle=r, opacity=o,border=rgb(255, 255, 255), borderWidth=1)
+    drawRegularPolygon(x,y,3,3,fill=rgb(255, 255, 255), rotateAngle=r, opacity=o,border=rgb(255, 255, 255), borderWidth=1)

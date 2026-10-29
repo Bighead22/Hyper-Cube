@@ -13,6 +13,7 @@ import playerStats
 import dificultyCurve
 import upgrades
 
+
 app.setMaxShapeCount(160000)
 
 def onAppStart(app):
@@ -245,14 +246,35 @@ def onStep(app):
         playerStats.hp = 0.01
         stats.gameOverL = 'You lost the game'
 
-def trail(app):
+def trail():
     # Player trail
-    drawRect(playerStats.playerX - playerStats.playerXSpeed * 3-5, playerStats.playerY - playerStats.playerYSpeed * 3-5, 10, 10, fill=rgb(255, 0, 0), opacity=5, border=rgb(255, 255, 255), borderWidth=1, rotateAngle=playerStats.playerAngle)
-    drawRect(playerStats.playerX - playerStats.playerXSpeed * 2.5-5, playerStats.playerY - playerStats.playerYSpeed * 2.5-5, 10, 10, fill=rgb(255, 0, 0), opacity=6, border=rgb(255, 255, 255), borderWidth=1, rotateAngle=playerStats.playerAngle)
-    drawRect(playerStats.playerX - playerStats.playerXSpeed * 2-5, playerStats.playerY - playerStats.playerYSpeed * 2-5, 10, 10, fill=rgb(255, 0, 0), opacity=7, border=rgb(255, 255, 255), borderWidth=1, rotateAngle=playerStats.playerAngle)
-    drawRect(playerStats.playerX - playerStats.playerXSpeed * 1.5-5, playerStats.playerY - playerStats.playerYSpeed * 1.5-5, 10, 10, fill=rgb(255, 0, 0), opacity=8, border=rgb(255, 255, 255), borderWidth=1, rotateAngle=playerStats.playerAngle)
-    drawRect(playerStats.playerX - playerStats.playerXSpeed * 1-5, playerStats.playerY - playerStats.playerYSpeed * 1-5, 10, 10, fill=rgb(255, 0, 0), opacity=9, border=rgb(255, 255, 255), borderWidth=1, rotateAngle=playerStats.playerAngle)
-    drawRect(playerStats.playerX - playerStats.playerXSpeed * 0.5-5, playerStats.playerY - playerStats.playerYSpeed * 0.5-5, 10, 10, fill=rgb(255, 0, 0), opacity=10, border=rgb(255, 255, 255), borderWidth=1, rotateAngle=playerStats.playerAngle)
+    if playerStats.playerType == 1:
+        i = 0
+        j= 3
+        n = 5
+        while i < 6:
+            playerStats.player1(playerStats.playerX - playerStats.playerXSpeed * j, playerStats.playerY- playerStats.playerYSpeed * j, playerStats.playerAngle,n)
+            i += 1
+            j -= 0.5
+            n += 1
+    elif playerStats.playerType == 2:
+        i = 0
+        j= 3
+        n = 5
+        while i < 6:
+            playerStats.player2(playerStats.playerX - playerStats.playerXSpeed * j, playerStats.playerY- playerStats.playerYSpeed * j, playerStats.playerAngle,n)
+            i += 1
+            j -= 0.5
+            n += 1
+    elif playerStats.playerType == 3:
+        i = 0
+        j= 3
+        n = 5
+        while i < 6:
+            playerStats.player3(playerStats.playerX - playerStats.playerXSpeed * j, playerStats.playerY- playerStats.playerYSpeed * j, playerStats.playerAngle,n)
+            i += 1
+            j -= 0.5
+            n += 1
 
     # Enemy trails
     for enemy in enemyStats.enemies:
@@ -314,12 +336,17 @@ def redrawAll(app):
         drawCircle(bullet['x']-bullet['vx']*0.6, bullet['y']-bullet['vy']*0.6, playerStats.bulletSize, fill=rgb(0, 255, 255), opacity=4)
     
     # Glow trails
-    trail(playerStats)
-    drawRect(playerStats.playerX - playerStats.playerXSpeed * 0.5-5, playerStats.playerY - playerStats.playerYSpeed * 0.5-5, 10, 10, fill=rgb(255, 0, 0), opacity=10, border=rgb(255, 255, 255), borderWidth=1, rotateAngle=playerStats.playerAngle)
+    trail()
     
-    # Player
-    drawRect(playerStats.playerX, playerStats.playerY, 10, 10, fill=rgb(255, 0, 0), border=rgb(255, 255, 255), borderWidth=1, align='center', rotateAngle=playerStats.playerAngle, opacity=(35 if enemyStats.playerInvuln % 8 < 4 and enemyStats.playerInvuln > 0 else 100))
-
+    
+    #player
+    if playerStats.playerType == 1:
+        playerStats.player1(playerStats.playerX, playerStats.playerY, playerStats.playerAngle, (35 if enemyStats.playerInvuln % 8 < 4 and enemyStats.playerInvuln > 0 else 100))
+    elif playerStats.playerType == 2:
+        playerStats.player2(playerStats.playerX, playerStats.playerY, playerStats.playerAngle, (35 if enemyStats.playerInvuln % 8 < 4 and enemyStats.playerInvuln > 0 else 100))
+    elif playerStats.playerType == 3:
+        playerStats.player3(playerStats.playerX, playerStats.playerY, playerStats.playerAngle, (35 if enemyStats.playerInvuln % 8 < 4 and enemyStats.playerInvuln > 0 else 100))
+    
     # Enemies
     for enemy in enemyStats.enemies:
         eo = 30 if enemy['spawn'] > 0 else 100   # faded while spawning in
