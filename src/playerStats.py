@@ -8,7 +8,6 @@ playerStats.playerType = 2
 #p1 Specific
 playerStats.dashsize = 10
 #p2 Specific
-playerStats.cd = 10
 playerStats.fireRate = 1
 #p3 Specific
 
