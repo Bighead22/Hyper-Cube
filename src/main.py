@@ -18,6 +18,7 @@ app.setMaxShapeCount(160000)
 
 def onAppStart(app):
 
+    app.isMouseHeld = False
     app.stepsPerSecond = 60
 
 def onMousePress(app, mouseX, mouseY):
@@ -26,9 +27,44 @@ def onMousePress(app, mouseX, mouseY):
         return
     if stats.gameOverL:
         return
-    if playerStats.mag != 0.05:
-        dx = mouseX - playerStats.playerX
-        dy = mouseY - playerStats.playerY
+    if playerStats.playerType == 1:
+        if playerStats.mag != 0.05:
+            dx = mouseX - playerStats.playerX
+            dy = mouseY - playerStats.playerY
+            baseAngle = math.atan2(dy, dx)
+            
+            spreadAngle = math.radians(5*playerStats.bulletCount)
+            
+            if playerStats.bulletCount > 1:
+                angleStep = spreadAngle / (playerStats.bulletCount - 1)
+                startAngle = baseAngle - (spreadAngle / 2)
+            else:
+                angleStep = 0
+                startAngle = baseAngle
+
+            for i in range(playerStats.bulletCount):
+                angle = startAngle + (i * angleStep)
+                vx = math.cos(angle) * playerStats.bulletSpeed
+                vy = math.sin(angle) * playerStats.bulletSpeed
+                playerStats.bullets.append({'x': playerStats.playerX, 'y': playerStats.playerY, 'vx': vx, 'vy': vy})
+                playerStats.playerXSpeed -= (vx * playerStats.recoil) * playerStats.recoilResitance
+                playerStats.playerYSpeed -= (vy * playerStats.recoil) * playerStats.recoilResitance
+                i += 1
+
+            if playerStats.mag > 1:
+                playerStats.mag-=1
+            if playerStats.mag == 1:
+                playerStats.mag = 0.05
+    if playerStats.playerType == 2:
+        app.isMouseHeld = True
+
+def onMouseRelease(app, mouseX, mouseY):
+    app.isMouseHeld = False
+
+def player2Shooting(app):
+    if app.isMouseHeld and playerStats.mag != 0.05:
+        dx = stats.mouseX - playerStats.playerX
+        dy = stats.mouseY - playerStats.playerY
         baseAngle = math.atan2(dy, dx)
         
         spreadAngle = math.radians(5*playerStats.bulletCount)
@@ -49,15 +85,15 @@ def onMousePress(app, mouseX, mouseY):
             playerStats.playerYSpeed -= (vy * playerStats.recoil) * playerStats.recoilResitance
             i += 1
 
-    if playerStats.mag > 1:
-        playerStats.mag-=1
-    if playerStats.mag == 1:
-        playerStats.mag = 0.05
+        if playerStats.mag > 1:
+            playerStats.mag-=1
+        if playerStats.mag == 1:
+            playerStats.mag = 0.05
 
 def onKeyPress(app, key):
-    if stats.gameOverL:
-        return
-    if key == 's':
+    if stats.playerType == 1:
+        playerStats.dashing1(key)
+    if key == 'escape':
         if upgrades.uV:
             upgrades.closeShop()
         else:
@@ -86,6 +122,8 @@ def screenWraping(app):
         if enemy['y'] > 1000: enemy['y'] = 0
     
 def onStep(app):
+    player2Shooting(app)
+
     if upgrades.uV or stats.gameOverL:
         return
     stats.score += 1/app.stepsPerSecond
