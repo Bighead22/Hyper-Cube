@@ -8,7 +8,8 @@ playerStats.playerType = 2
 #p1 Specific
 playerStats.dashsize = 10
 #p2 Specific
-playerStats.fireRate = 1
+playerStats.n = 1
+playerStats.fireRate = 10
 #p3 Specific
 
 playerStats.playerAngle = 0
@@ -23,6 +24,7 @@ playerStats.maxHp = 100
 playerStats.hp = 100
 playerStats.hpRegen = 1500 # lower number for faster regen higher number for slower regen
 
+playerStats.bulletConsumption = 1
 playerStats.mag = 30
 playerStats.maxMag = 30
 playerStats.bullets = []

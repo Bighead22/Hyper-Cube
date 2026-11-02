@@ -16,6 +16,7 @@ upgrades.hpOrRegenU = 'images/hpOrRegen.png'
 upgrades.reloadOrMagU = 'images/reloadOrMag.png'
 upgrades.speedU = 'images/speed.png'
 upgrades.moneyOrLuckU = 'images/moneyOrLuck.png'
+upgrades.fireRateU = 'images/fireRate.png'
 
 # Shop state
 
@@ -87,6 +88,10 @@ upgrades.cards = [
     {'name': 'Fortune', 'image': upgrades.moneyOrLuckU, 'effects': [
         {'stat': 'moneyMultiplyer', 'target': 'upgrades', 'op': 'add', 'value': 0.10, 'label': 'Coin gain'},
         {'stat': 'luck', 'target': 'upgrades', 'op': 'add', 'value': 0.10, 'label': 'Luck'},
+    ]},
+    {'name': 'FireRate', 'image': upgrades.fireRateU, 'effects': [
+        {'stat': 'fireRate', 'op': 'mul', 'value': 0.10, 'label': 'FireRate'},
+        {'stat': 'recoilResitance', 'op': 'mul', 'value': -0.08, 'label': 'Recoil'},
     ]},
 ]
 

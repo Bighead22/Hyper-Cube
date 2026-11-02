@@ -20,6 +20,14 @@ def onAppStart(app):
 
     app.isMouseHeld = False
     app.stepsPerSecond = 60
+    if playerStats.playerType == 1:
+        playerStats.playerX = 500
+        playerStats.playerY = 500
+        playerStats.bulletConsumption = 1
+    if playerStats.playerType == 2:
+        playerStats.playerX = 500
+        playerStats.playerY = 500
+        playerStats.bulletConsumption = 0.25
 
 def onMousePress(app, mouseX, mouseY):
     if upgrades.uV:
@@ -63,35 +71,38 @@ def onMouseRelease(app, mouseX, mouseY):
 
 def player2Shooting(app):
     if app.isMouseHeld and playerStats.mag != 0.05:
-        dx = stats.mouseX - playerStats.playerX
-        dy = stats.mouseY - playerStats.playerY
-        baseAngle = math.atan2(dy, dx)
-        
-        spreadAngle = math.radians(5*playerStats.bulletCount)
-        
-        if playerStats.bulletCount > 1:
-            angleStep = spreadAngle / (playerStats.bulletCount - 1)
-            startAngle = baseAngle - (spreadAngle / 2)
-        else:
-            angleStep = 0
-            startAngle = baseAngle
+        playerStats.n += playerStats.fireRate
+        if playerStats.n > 60:
+            playerStats.n = 0
+            dx = stats.mouseX - playerStats.playerX
+            dy = stats.mouseY - playerStats.playerY
+            baseAngle = math.atan2(dy, dx)
+            
+            spreadAngle = math.radians(5*playerStats.bulletCount)
+            
+            if playerStats.bulletCount > 1:
+                angleStep = spreadAngle / (playerStats.bulletCount - 1)
+                startAngle = baseAngle - (spreadAngle / 2)
+            else:
+                angleStep = 0
+                startAngle = baseAngle
 
-        for i in range(playerStats.bulletCount):
-            angle = startAngle + (i * angleStep)
-            vx = math.cos(angle) * playerStats.bulletSpeed
-            vy = math.sin(angle) * playerStats.bulletSpeed
-            playerStats.bullets.append({'x': playerStats.playerX, 'y': playerStats.playerY, 'vx': vx, 'vy': vy})
-            playerStats.playerXSpeed -= (vx * playerStats.recoil) * playerStats.recoilResitance
-            playerStats.playerYSpeed -= (vy * playerStats.recoil) * playerStats.recoilResitance
-            i += 1
+            for i in range(playerStats.bulletCount):
+                angle = startAngle + (i * angleStep)
+                vx = math.cos(angle) * playerStats.bulletSpeed
+                vy = math.sin(angle) * playerStats.bulletSpeed
+                playerStats.bullets.append({'x': playerStats.playerX, 'y': playerStats.playerY, 'vx': vx, 'vy': vy})
+                playerStats.playerXSpeed -= (vx * playerStats.recoil) * playerStats.recoilResitance
+                playerStats.playerYSpeed -= (vy * playerStats.recoil) * playerStats.recoilResitance
+                i += 1
 
-        if playerStats.mag > 1:
-            playerStats.mag-=1
-        if playerStats.mag == 1:
-            playerStats.mag = 0.05
+            if playerStats.mag > 1:
+                playerStats.mag -= playerStats.bulletConsumption
+            if playerStats.mag == 1:
+                playerStats.mag = 0.05
 
 def onKeyPress(app, key):
-    if stats.playerType == 1:
+    if playerStats.playerType == 1:
         playerStats.dashing1(key)
     if key == 'escape':
         if upgrades.uV:
