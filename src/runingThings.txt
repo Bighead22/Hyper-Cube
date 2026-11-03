@@ -1,0 +1,5 @@
+pip install PyGetWindow
+pip install cmu-graphics
+pip install keyboard
+python src//hardMode.py
+pyton src//main.py

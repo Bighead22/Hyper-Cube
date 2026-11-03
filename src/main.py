@@ -1,9 +1,5 @@
-#python src/main.py
-#pip install cmu-graphics
-#ollama pull qwen3.5:4b
-#ollama run qwen3.5:4b  
-
 from cmu_graphics import *
+import os
 import math
 import random
 import stats
