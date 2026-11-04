@@ -17,13 +17,15 @@ def onAppStart(app):
     app.isMouseHeld = False
     app.stepsPerSecond = 60
     if playerStats.playerType == 1:
-        playerStats.playerX = 500
-        playerStats.playerY = 500
         playerStats.bulletConsumption = 1
-    if playerStats.playerType == 2:
-        playerStats.playerX = 500
-        playerStats.playerY = 500
+    elif playerStats.playerType == 2:
         playerStats.bulletConsumption = 0.25
+        playerStats.bulletDamage = 12.5
+    elif playerStats.playerType == 3:
+        playerStats.bulletConsumption = 0.1
+        playerStats.bulletSpeed = 10
+        playerStats.fireRate = 100
+
 
 def onMousePress(app, mouseX, mouseY):
     if upgrades.uV:
@@ -59,13 +61,13 @@ def onMousePress(app, mouseX, mouseY):
                 playerStats.mag-=1
             if playerStats.mag == 1:
                 playerStats.mag = 0.05
-    if playerStats.playerType == 2:
+    if playerStats.playerType == 2 or 3:
         app.isMouseHeld = True
 
 def onMouseRelease(app, mouseX, mouseY):
     app.isMouseHeld = False
 
-def player2Shooting(app):
+def player2and3Shooting(app):
     if app.isMouseHeld and playerStats.mag != 0.05:
         playerStats.n += playerStats.fireRate
         if playerStats.n > 60:
@@ -129,7 +131,7 @@ def screenWraping(app):
         if enemy['y'] > 1000: enemy['y'] = 0
     
 def onStep(app):
-    player2Shooting(app)
+    player2and3Shooting(app)
 
     if upgrades.uV or stats.gameOverL:
         return
@@ -372,13 +374,27 @@ def redrawAll(app):
 
     drawRect(0, 0, 1000, 1000, fill=rgb(0, 5, 20))
     
-    for bullet in playerStats.bullets:
-        drawCircle(bullet['x'], bullet['y'], playerStats.bulletSize, fill=rgb(0, 200, 200), border=rgb(255, 255, 255), borderWidth=1)
-        # Bullet trail
-        drawCircle(bullet['x'], bullet['y'], playerStats.bulletSize + 3, fill=rgb(0, 255, 255), opacity=10)
-        drawCircle(bullet['x']-bullet['vx']*0.2, bullet['y']-bullet['vy']*0.2, playerStats.bulletSize + 2, fill=rgb(0, 255, 255), opacity=8)
-        drawCircle(bullet['x']-bullet['vx']*0.4, bullet['y']-bullet['vy']*0.4, playerStats.bulletSize + 1, fill=rgb(0, 255, 255), opacity=6)
-        drawCircle(bullet['x']-bullet['vx']*0.6, bullet['y']-bullet['vy']*0.6, playerStats.bulletSize, fill=rgb(0, 255, 255), opacity=4)
+    if playerStats.playerType == 1:
+        for bullet in playerStats.bullets:
+            drawCircle(bullet['x'], bullet['y'], playerStats.bulletSize, fill=rgb(0, 200, 200), border=rgb(255, 255, 255), borderWidth=1)
+            # Bullet trail
+            drawCircle(bullet['x'], bullet['y'], playerStats.bulletSize + 3, fill=rgb(0, 255, 255), opacity=10)
+            drawCircle(bullet['x']-bullet['vx']*0.2, bullet['y']-bullet['vy']*0.2, playerStats.bulletSize + 2, fill=rgb(0, 255, 255), opacity=8)
+            drawCircle(bullet['x']-bullet['vx']*0.4, bullet['y']-bullet['vy']*0.4, playerStats.bulletSize + 1, fill=rgb(0, 255, 255), opacity=6)
+            drawCircle(bullet['x']-bullet['vx']*0.6, bullet['y']-bullet['vy']*0.6, playerStats.bulletSize, fill=rgb(0, 255, 255), opacity=4)
+    elif playerStats.playerType == 2:
+        for bullet in playerStats.bullets:
+            drawRegularPolygon(bullet['x'], bullet['y'], playerStats.bulletSize*2,4, fill=rgb(255, 175, 0), border=rgb(255, 255, 255), borderWidth=1)
+            # Bullet trail
+            drawRegularPolygon(bullet['x'], bullet['y'], playerStats.bulletSize*2 + 3,4, fill=rgb(255, 175, 0), opacity=10)
+            drawRegularPolygon(bullet['x']-bullet['vx']*0.2, bullet['y']-bullet['vy']*0.2, playerStats.bulletSize*2 + 2,4, fill=rgb(255, 175, 0), opacity=8)
+            drawRegularPolygon(bullet['x']-bullet['vx']*0.4, bullet['y']-bullet['vy']*0.4, playerStats.bulletSize*2 + 1,4, fill=rgb(255, 175, 0), opacity=6)
+            drawRegularPolygon(bullet['x']-bullet['vx']*0.6, bullet['y']-bullet['vy']*0.6, playerStats.bulletSize*2,4, fill=rgb(255, 175, 0), opacity=4)
+    elif playerStats.playerType == 3:
+        for bullet in playerStats.bullets:
+            drawCircle(bullet['x'], bullet['y'], playerStats.bulletSize+3, fill=rgb(255, 0, 0))
+            # Bullet trail
+            drawCircle(bullet['x']-bullet['vx']*0.2, bullet['y']-bullet['vy']*0.2, playerStats.bulletSize+3, fill=rgb(255, 0, 0))
     
     # Glow trails
     trail()
