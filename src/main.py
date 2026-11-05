@@ -3,10 +3,8 @@ import os
 import math
 import random
 import stats
-import logicFunctions
 import enemyStats
 import playerStats
-import dificultyCurve
 import upgrades
 #
 
@@ -286,12 +284,12 @@ def onStep(app):
         return
     stats.score += 1/app.stepsPerSecond
     stats.time += 1/app.stepsPerSecond
-    enemyStats.enemyHpMultiplier = dificultyCurve.difficulty(stats.time+43)/20
+    enemyStats.enemyHpMultiplier = stats.difficulty(stats.time+43)/20
     
     while enemyStats.boss is None and len(enemyStats.enemies) < enemyStats.enemyCount:
         enemyStats.spawnEnemy(playerStats.playerX, playerStats.playerY, enemyStats.enemyHpMultiplier)
 
-    if dificultyCurve.difficulty(stats.time+43) > (enemyStats.maxEnemyCount*2):
+    if stats.difficulty(stats.time+43) > (enemyStats.maxEnemyCount*2):
         enemyStats.enemyCount += 2
         enemyStats.maxEnemyCount += 2
     
@@ -371,7 +369,7 @@ def onStep(app):
         for enemy in enemyStats.enemies:
             if enemy['spawn'] > 0:
                 continue   # still spawning in: bullets pass through
-            if logicFunctions.isColiding(app, bullet['x'], bullet['y'], enemy['x'], enemy['y'], playerStats.bulletSize + enemy['size'] + 10):
+            if stats.isColiding(app, bullet['x'], bullet['y'], enemy['x'], enemy['y'], playerStats.bulletSize + enemy['size'] + 10):
                 enemy['hp'] -= playerStats.bulletDamage
                 if playerStats.playerType != 3:
                     enemy['vx'] += bullet['vx'] * 0.2
@@ -429,7 +427,7 @@ def onStep(app):
     for enemy in enemyStats.enemies:
         if enemy['spawn'] > 0:
             continue
-        if logicFunctions.isColiding(app, playerStats.playerX, playerStats.playerY, enemy['x'], enemy['y'], enemy['size'] + 5):
+        if stats.isColiding(app, playerStats.playerX, playerStats.playerY, enemy['x'], enemy['y'], enemy['size'] + 5):
             if enemyStats.playerInvuln > 0:
                 continue
             cfg = enemyStats.types[enemy['type']]
