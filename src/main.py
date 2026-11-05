@@ -20,11 +20,16 @@ def onAppStart(app):
         playerStats.bulletConsumption = 1
     elif playerStats.playerType == 2:
         playerStats.bulletConsumption = 0.25
-        playerStats.bulletDamage = 12.5
+        playerStats.bulletDamage = 15
+        playerStats.maxHp = 125
+        playerStats.BulletSize = 6
     elif playerStats.playerType == 3:
-        playerStats.bulletConsumption = 0.1
-        playerStats.bulletSpeed = 10
-        playerStats.fireRate = 100
+        playerStats.bulletConsumption = 0.05
+        playerStats.bulletSpeed = 100
+        playerStats.fireRate = 75
+        playerStats.recoilResitance = 0
+        playerStats.bulletDamage = 10
+        playerStats.maxHp = 50
 
 
 def onMousePress(app, mouseX, mouseY):
@@ -61,14 +66,14 @@ def onMousePress(app, mouseX, mouseY):
                 playerStats.mag-=1
             if playerStats.mag == 1:
                 playerStats.mag = 0.05
-    if playerStats.playerType == 2 or 3:
+    if playerStats.playerType in (2, 3):
         app.isMouseHeld = True
 
 def onMouseRelease(app, mouseX, mouseY):
     app.isMouseHeld = False
 
 def player2and3Shooting(app):
-    if app.isMouseHeld and playerStats.mag != 0.05:
+    if app.isMouseHeld and playerStats.mag != 0.01:
         playerStats.n += playerStats.fireRate
         if playerStats.n > 60:
             playerStats.n = 0
@@ -94,14 +99,18 @@ def player2and3Shooting(app):
                 playerStats.playerYSpeed -= (vy * playerStats.recoil) * playerStats.recoilResitance
                 i += 1
 
-            if playerStats.mag > 1:
+            if playerStats.mag > 0.01:
                 playerStats.mag -= playerStats.bulletConsumption
-            if playerStats.mag == 1:
-                playerStats.mag = 0.05
+            if playerStats.mag <= 0.01:
+                playerStats.mag = 0.01
 
 def onKeyPress(app, key):
     if playerStats.playerType == 1:
-        playerStats.dashing1(key)
+        playerStats.dashing(key)
+    if playerStats.playerType == 2:
+        playerStats.escape(key)
+    if playerStats.playerType == 3:
+            playerStats.converge(key)
     if key == 'escape':
         if upgrades.uV:
             upgrades.closeShop()
@@ -130,7 +139,97 @@ def screenWraping(app):
         if enemy['y'] < 0: enemy['y'] = 1000
         if enemy['y'] > 1000: enemy['y'] = 0
     
+def distToSegment(px, py, x1, y1, x2, y2):
+    # distance from point (px,py) to the segment (x1,y1)-(x2,y2); stops fast bullets tunneling
+    dx, dy = x2 - x1, y2 - y1
+    lenSq = dx*dx + dy*dy
+    t = 0 if lenSq == 0 else max(0, min(1, ((px - x1)*dx + (py - y1)*dy) / lenSq))
+    return math.hypot(px - (x1 + t*dx), py - (y1 + t*dy))
+
+def bossHitByBullet(bullet):
+    boss = enemyStats.boss
+    if boss is None or boss['spawn'] > 0:
+        return False
+    d = distToSegment(boss['x'], boss['y'], bullet['x'] - bullet['vx'], bullet['y'] - bullet['vy'], bullet['x'], bullet['y'])
+    if d <= boss['size'] + playerStats.bulletSize:
+        boss['hp'] -= playerStats.bulletDamage
+        if boss['hp'] <= 0:
+            stats.score += 100
+            stats.coins += enemyStats.bossCoins * upgrades.moneyMultiplyer
+            enemyStats.boss = None
+            enemyStats.bossOrbs = []
+        return True
+    return False
+
+def hurtPlayer(fraction, fromX, fromY):
+    # same hit rules as normal enemies: damage, i-frames, knockback
+    if enemyStats.playerInvuln > 0:
+        return
+    dx = playerStats.playerX - fromX
+    dy = playerStats.playerY - fromY
+    d = math.hypot(dx, dy) or 1
+    playerStats.hp = max(0.01, playerStats.hp - playerStats.maxHp * fraction)
+    enemyStats.playerInvuln = enemyStats.playerIFrames
+    playerStats.playerXSpeed += dx / d * enemyStats.knockback
+    playerStats.playerYSpeed += dy / d * enemyStats.knockback
+
+def updateBoss():
+    # Spawn a boss every bossInterval seconds (skipped if the last one is still alive)
+    if stats.time >= enemyStats.nextBossTime:
+        enemyStats.nextBossTime += enemyStats.bossInterval
+        if enemyStats.boss is None:
+            enemyStats.spawnBoss(playerStats.playerX, playerStats.playerY, enemyStats.enemyHpMultiplier)
+            enemyStats.bossInterval *= 0.75
+            enemyStats.bossBaseHp *= 1.3
+                                        
+    boss = enemyStats.boss
+    if boss is not None:
+        boss['rot'] += 2
+        if boss['spawn'] > 0:
+            boss['spawn'] -= 1          # warning phase: no moving, no attacking
+        else:
+            ang = math.atan2(playerStats.playerY - boss['y'], playerStats.playerX - boss['x'])
+            boss['vx'] += math.cos(ang) * enemyStats.bossAccel
+            boss['vy'] += math.sin(ang) * enemyStats.bossAccel
+            spd = math.hypot(boss['vx'], boss['vy'])
+            if spd > enemyStats.bossMaxSpeed:
+                boss['vx'] *= enemyStats.bossMaxSpeed / spd
+                boss['vy'] *= enemyStats.bossMaxSpeed / spd
+            boss['x'] = max(0, min(1000, boss['x'] + boss['vx']))
+            boss['y'] = max(0, min(1000, boss['y'] + boss['vy']))
+
+            # Radial orb attack (cooldown shortens below 50% HP)
+            boss['cd'] -= 1
+            if boss['cd'] <= 0:
+                enemyStats.fireOrbRing(boss)
+                enraged = boss['hp'] < boss['maxHp'] / 2
+                boss['cd'] = int(enemyStats.bossAttackCD * (0.7 if enraged else 1))
+
+            # Touching the boss hurts
+            if math.hypot(playerStats.playerX - boss['x'], playerStats.playerY - boss['y']) < boss['size'] + 8:
+                hurtPlayer(enemyStats.bossContactDamage, boss['x'], boss['y'])
+
+    # Orbs
+    keep = []
+    for orb in enemyStats.bossOrbs:
+        orb['x'] += orb['vx']
+        orb['y'] += orb['vy']
+        orb['life'] -= 1
+        if orb['life'] <= 0 or not (-100 <= orb['x'] <= 1100 and -100 <= orb['y'] <= 1100):
+            continue
+        if math.hypot(playerStats.playerX - orb['x'], playerStats.playerY - orb['y']) < enemyStats.bossOrbSize + 8:
+            hurtPlayer(enemyStats.bossOrbDamage, orb['x'], orb['y'])
+            continue                     # orb pops on hit
+        keep.append(orb)
+    enemyStats.bossOrbs = keep
+
 def onStep(app):
+    if playerStats.playerType == 3:
+        playerStats.bulletSpeed = 100
+        playerStats.recoilResitance = 0
+    if playerStats.fireRate > 75:
+        playerStats.bulletDamage += (playerStats.fireRate-75)
+        playerStats.fireRate = 75
     player2and3Shooting(app)
 
     if upgrades.uV or stats.gameOverL:
@@ -139,7 +238,7 @@ def onStep(app):
     stats.time += 1/app.stepsPerSecond
     enemyStats.enemyHpMultiplier = dificultyCurve.difficulty(stats.time+43)/20
     
-    while len(enemyStats.enemies) < enemyStats.enemyCount:
+    while enemyStats.boss is None and len(enemyStats.enemies) < enemyStats.enemyCount:
         enemyStats.spawnEnemy(playerStats.playerX, playerStats.playerY, enemyStats.enemyHpMultiplier)
 
     if dificultyCurve.difficulty(stats.time+43) > (enemyStats.maxEnemyCount*2):
@@ -218,10 +317,13 @@ def onStep(app):
         
         # Check collision with each enemy
         for enemy in enemyStats.enemies:
+            if enemy['spawn'] > 0:
+                continue   # still spawning in: bullets pass through
             if logicFunctions.isColiding(app, bullet['x'], bullet['y'], enemy['x'], enemy['y'], playerStats.bulletSize + enemy['size'] + 10):
                 enemy['hp'] -= playerStats.bulletDamage
-                enemy['vx'] += bullet['vx'] * 0.2
-                enemy['vy'] += bullet['vy'] * 0.2
+                if playerStats.playerType != 3:
+                    enemy['vx'] += bullet['vx'] * 0.2
+                    enemy['vy'] += bullet['vy'] * 0.2
                 hit = True
                 
                 # Enemy death/respawn
@@ -233,9 +335,14 @@ def onStep(app):
                         stats.coins += 5 * upgrades.moneyMultiplyer
                     if enemy['type'] == 2:
                         stats.coins += 7.5 * upgrades.moneyMultiplyer
+                    if enemy['type'] == 3:
+                        stats.coins += 15 * upgrades.moneyMultiplyer
                 break # Bullet disappears after hitting one enemy
                 
-        if not hit and 0 <= bullet['x'] <= 1000 and 0 <= bullet['y'] <= 1000:
+        if not hit and bossHitByBullet(bullet):
+            hit = True
+
+        if not hit and -200 <= bullet['x'] <= 1200 and -200 <= bullet['y'] <= 1200:
             bulletsToKeep.append(bullet)
             
     playerStats.bullets = bulletsToKeep
@@ -288,6 +395,8 @@ def onStep(app):
             enemy['vx'] = -nx * enemyStats.knockback
             enemy['vy'] = -ny * enemyStats.knockback
             enemy['stun'] = enemyStats.hitStun
+
+    updateBoss()
 
     if playerStats.hp <= 0.01:
         playerStats.hp = 0.01
@@ -345,6 +454,15 @@ def trail():
                 i += 1
                 j -= 0.5
                 n += 1
+        if enemy['type'] == 3:
+            i = 0
+            j= 3
+            n = 5
+            while i < 6:
+                drawRegularPolygon(enemy['x'] - enemy['vx'] * j, enemy['y'] - enemy['vy'] * j, enemy['size'] + 5, 100, fill=rgb(255, 0, 0), opacity=n, border=rgb(255, 255, 255), borderWidth=1, rotateAngle=enemy['angle']-90)
+                i += 1
+                j -= 0.5
+                n += 1
             
 def drawShop(app):
     if not upgrades.uV:
@@ -386,15 +504,13 @@ def redrawAll(app):
         for bullet in playerStats.bullets:
             drawRegularPolygon(bullet['x'], bullet['y'], playerStats.bulletSize*2,4, fill=rgb(255, 175, 0), border=rgb(255, 255, 255), borderWidth=1)
             # Bullet trail
-            drawRegularPolygon(bullet['x'], bullet['y'], playerStats.bulletSize*2 + 3,4, fill=rgb(255, 175, 0), opacity=10)
-            drawRegularPolygon(bullet['x']-bullet['vx']*0.2, bullet['y']-bullet['vy']*0.2, playerStats.bulletSize*2 + 2,4, fill=rgb(255, 175, 0), opacity=8)
-            drawRegularPolygon(bullet['x']-bullet['vx']*0.4, bullet['y']-bullet['vy']*0.4, playerStats.bulletSize*2 + 1,4, fill=rgb(255, 175, 0), opacity=6)
-            drawRegularPolygon(bullet['x']-bullet['vx']*0.6, bullet['y']-bullet['vy']*0.6, playerStats.bulletSize*2,4, fill=rgb(255, 175, 0), opacity=4)
+            drawRegularPolygon(bullet['x'], bullet['y'], playerStats.bulletSize + 3,4, fill=rgb(255, 175, 0), opacity=10)
+            drawRegularPolygon(bullet['x']-bullet['vx']*0.2, bullet['y']-bullet['vy']*0.2, playerStats.bulletSize + 2,4, fill=rgb(255, 175, 0), opacity=8)
+            drawRegularPolygon(bullet['x']-bullet['vx']*0.4, bullet['y']-bullet['vy']*0.4, playerStats.bulletSize + 1,4, fill=rgb(255, 175, 0), opacity=6)
+            drawRegularPolygon(bullet['x']-bullet['vx']*0.6, bullet['y']-bullet['vy']*0.6, playerStats.bulletSize,4, fill=rgb(255, 175, 0), opacity=4)
     elif playerStats.playerType == 3:
         for bullet in playerStats.bullets:
-            drawCircle(bullet['x'], bullet['y'], playerStats.bulletSize+3, fill=rgb(255, 0, 0))
-            # Bullet trail
-            drawCircle(bullet['x']-bullet['vx']*0.2, bullet['y']-bullet['vy']*0.2, playerStats.bulletSize+3, fill=rgb(255, 0, 0))
+            drawLine(bullet['x']-bullet['vx']*1, bullet['y']-bullet['vy']*1, bullet['x'], bullet['y'], lineWidth=playerStats.bulletSize, fill=rgb(255, 255, 255))
     
     # Glow trails
     trail()
@@ -417,6 +533,24 @@ def redrawAll(app):
         if enemy['type'] == 2:
             drawRegularPolygon(enemy['x'], enemy['y'], enemy['size'] + 5, 6, fill=rgb(255, 0, 255), border=rgb(255, 255, 255), borderWidth=1, rotateAngle=enemy['angle']-90, opacity=eo)
             drawRect(enemy['x'], enemy['y'] + 20, (enemy['hp'])*(0.2/enemyStats.enemyHpMultiplier), 3, fill=rgb(0, 255, 0), align='center')
+        if enemy['type'] == 3:
+            drawRegularPolygon(enemy['x'], enemy['y'], enemy['size'] + 5, 100, fill=rgb(255, 0, 0), border=rgb(255, 255, 255), borderWidth=1, rotateAngle=enemy['angle']-90, opacity=eo)
+            drawRect(enemy['x'], enemy['y'] + 20, (enemy['hp'])*(0.2/enemyStats.enemyHpMultiplier), 3, fill=rgb(0, 255, 0), align='center')
+
+    # Boss + orbs
+    boss = enemyStats.boss
+    for orb in enemyStats.bossOrbs:
+        enemyStats.drawOrb(orb['x'], orb['y'], enemyStats.bossOrbSize)
+    if boss is not None:
+        enemyStats.bossTexture(boss['x'], boss['y'], boss['rot'], 30 if boss['spawn'] > 0 else 100)
+        if boss['spawn'] > 0:
+            if boss['spawn'] % 20 < 12:
+                drawLabel('Elite Enemy Incoming', 500, 120, size=30, fill=rgb(255, 0, 255), bold=True, border=rgb(255, 255, 255), borderWidth=1)
+        else:
+            # Boss health bar (top center)
+            drawRect(300, 900-12, 404, 22, fill=rgb(255, 255, 255))
+            drawRect(302, 900-10, 400 * max(0, boss['hp']) / boss['maxHp'], 18, fill=rgb(255, 0, 255))
+            drawLabel('BOSS', 500, 900-54, size=16, fill='white', bold=True)
 
     # UI: Health
     drawRect(10, 10, playerStats.maxHp*2+4, 24, fill=rgb(255, 255, 255))

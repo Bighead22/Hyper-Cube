@@ -34,7 +34,8 @@ upgrades.rerollCost = 5
 upgrades.rarityNames = ['common', 'uncommon', 'rare', 'epic', 'legendary']
 # How much each rarity multiplies every effect on the card
 upgrades.rarityPower = {'common': 1, 'uncommon': 1.5, 'rare': 2.25, 'epic': 3.5, 'legendary': 5}
-upgrades.rarityCost = {'common': 10, 'uncommon': 20, 'rare': 40, 'epic': 80, 'legendary': 150}
+upgrades.upgradeCost = 20   # every card costs this much, whatever its rarity
+upgrades.rarityCost = {r: upgrades.upgradeCost for r in upgrades.rarityNames}
 upgrades.rarityColors = {
     'common': (170, 170, 170),
     'uncommon': (60, 220, 60),
@@ -91,7 +92,7 @@ upgrades.cards = [
     ]},
     {'name': 'FireRate', 'image': upgrades.fireRateU, 'effects': [
         {'stat': 'fireRate', 'op': 'mul', 'value': 0.10, 'label': 'FireRate'},
-        {'stat': 'recoilResitance', 'op': 'mul', 'value': -0.08, 'label': 'Recoil'},
+        {'stat': 'bulletDamage', 'op': 'mul', 'value': 0.15, 'label': 'Damage'},
     ]},
 ]
 

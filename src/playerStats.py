@@ -1,9 +1,10 @@
 from cmu_graphics import *
 import playerStats
 import math
+import stats
 
 
-playerStats.playerType = 2
+playerStats.playerType = 1
 
 #p1 Specific
 playerStats.dashsize = 10
@@ -48,7 +49,13 @@ def player2(x,y,r,o):
 def player3(x,y,r,o):
     drawRegularPolygon(x,y,7*math.sqrt(2),3,fill=rgb(0, 0, 255), rotateAngle=r+33, opacity=o,border=rgb(255, 255, 255), borderWidth=1)
     drawRegularPolygon(x,y,5,3,fill=rgb(255, 255, 255), rotateAngle=r+33, opacity=o,border=rgb(255, 255, 255), borderWidth=1)
-def dashing1(key):
+def player4(x,y,r,o):
+    drawCircle(x,y,7,fill=rgb(255, 150, 0), opacity=o,border=rgb(255, 255, 255), borderWidth=1)
+    drawCircle(x,y,4.5,fill=rgb(255, 255, 255), opacity=o,border=rgb(255, 255, 255), borderWidth=1)
+    
+#ablitys    
+
+def dashing(key):
     if key == 'a':
         playerStats.playerXSpeed -= playerStats.dashsize
     if key == 'd':
@@ -57,3 +64,17 @@ def dashing1(key):
         playerStats.playerYSpeed -= playerStats.dashsize
     if key == 's':
         playerStats.playerYSpeed += playerStats.dashsize
+def converge(key):
+    if key == 'space':
+        if playerStats.bulletCount > 1:
+            playerStats.bulletDamage *= (playerStats.bulletCount/2)
+            playerStats.bulletSize += playerStats.bulletCount
+            playerStats.bulletCount = 1
+def escape(key):
+    if key == 'space':
+        sY = stats.mouseY - playerStats.playerY
+        sX = stats.mouseX - playerStats.playerX
+        playerStats.playerYSpeed += sY/25
+        playerStats.playerXSpeed += sX/25
+        playerStats.playerX = stats.mouseX
+        playerStats.playerY = stats.mouseY
