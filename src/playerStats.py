@@ -4,7 +4,7 @@ import math
 import stats
 
 
-playerStats.playerType = 1
+playerStats.playerType = 3
 
 #p1 Specific
 playerStats.dashsize = 10

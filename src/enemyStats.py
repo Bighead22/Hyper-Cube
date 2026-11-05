@@ -2,7 +2,6 @@ from cmu_graphics import *
 import math
 import random
 import enemyStats
-import dificultyCurve
 
 enemyStats.enemyspawnCD = (10)*30 # lower number for faster spawn higher number for slower spawn chang number in ()
 enemyStats.enemyCount = -2 # Change this to add more enemies
