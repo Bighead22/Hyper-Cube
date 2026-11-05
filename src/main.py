@@ -22,7 +22,6 @@ def onAppStart(app):
         playerStats.bulletConsumption = 0.25
         playerStats.bulletDamage = 15
         playerStats.maxHp = 125
-        playerStats.BulletSize = 6
     elif playerStats.playerType == 3:
         playerStats.bulletConsumption = 0.05
         playerStats.bulletSpeed = 100
@@ -30,6 +29,12 @@ def onAppStart(app):
         playerStats.recoilResitance = 0
         playerStats.bulletDamage = 10
         playerStats.maxHp = 50
+    elif playerStats.playerType == 4:
+        playerStats.bulletConsumption = 5
+        playerStats.bulletDamage = 50
+        playerStats.maxHp = 100
+        playerStats.bulletSize = 7
+        playerStats.bulletSpeed = 10
 
 
 def onMousePress(app, mouseX, mouseY):
@@ -66,6 +71,36 @@ def onMousePress(app, mouseX, mouseY):
                 playerStats.mag-=1
             if playerStats.mag == 1:
                 playerStats.mag = 0.05
+                
+    if playerStats.playerType == 4:
+            if playerStats.mag != 0.05:
+                dx = mouseX - playerStats.playerX
+                dy = mouseY - playerStats.playerY
+                baseAngle = math.atan2(dy, dx)
+                
+                spreadAngle = math.radians(5*playerStats.bulletCount)
+                
+                if playerStats.bulletCount > 1:
+                    angleStep = spreadAngle / (playerStats.bulletCount - 1)
+                    startAngle = baseAngle - (spreadAngle / 2)
+                else:
+                    angleStep = 0
+                    startAngle = baseAngle
+    
+                for i in range(playerStats.bulletCount):
+                    angle = startAngle + (i * angleStep)
+                    vx = math.cos(angle) * playerStats.bulletSpeed
+                    vy = math.sin(angle) * playerStats.bulletSpeed
+                    playerStats.bullets.append({'x': playerStats.playerX, 'y': playerStats.playerY, 'vx': vx, 'vy': vy})
+                    playerStats.playerXSpeed -= (vx * playerStats.recoil) * playerStats.recoilResitance
+                    playerStats.playerYSpeed -= (vy * playerStats.recoil) * playerStats.recoilResitance
+                    i += 1
+    
+                if playerStats.mag > 1:
+                    playerStats.mag-=1
+                if playerStats.mag == 1:
+                    playerStats.mag = 0.05
+                    
     if playerStats.playerType in (2, 3):
         app.isMouseHeld = True
 
@@ -223,6 +258,21 @@ def updateBoss():
         keep.append(orb)
     enemyStats.bossOrbs = keep
 
+# Player 4 bullets curve toward the cursor. Bigger = sharper turns (degrees per frame).
+homingTurnRate = math.radians(6)
+
+def steerBulletToCursor(bullet):
+    speed = math.hypot(bullet['vx'], bullet['vy'])
+    dx = stats.mouseX - bullet['x']
+    dy = stats.mouseY - bullet['y']
+    if speed == 0 or math.hypot(dx, dy) < speed:
+        return   # already on the cursor, don't jitter
+    cur = math.atan2(bullet['vy'], bullet['vx'])
+    diff = (math.atan2(dy, dx) - cur + math.pi) % (2 * math.pi) - math.pi
+    cur += max(-homingTurnRate, min(homingTurnRate, diff))
+    bullet['vx'] = math.cos(cur) * speed
+    bullet['vy'] = math.sin(cur) * speed
+
 def onStep(app):
     if playerStats.playerType == 3:
         playerStats.bulletSpeed = 100
@@ -311,6 +361,8 @@ def onStep(app):
     # Bullet update and collision
     bulletsToKeep = []
     for bullet in playerStats.bullets:
+        if playerStats.playerType == 4:
+            steerBulletToCursor(bullet)
         bullet['x'] += bullet['vx']
         bullet['y'] += bullet['vy']
         hit = False
@@ -431,6 +483,15 @@ def trail():
             i += 1
             j -= 0.5
             n += 1
+    elif playerStats.playerType == 4:
+            i = 0
+            j= 3
+            n = 5
+            while i < 6:
+                playerStats.player4(playerStats.playerX - playerStats.playerXSpeed * j, playerStats.playerY- playerStats.playerYSpeed * j, playerStats.playerAngle,n)
+                i += 1
+                j -= 0.5
+                n += 1
 
     # Enemy trails
     for enemy in enemyStats.enemies:
@@ -511,6 +572,14 @@ def redrawAll(app):
     elif playerStats.playerType == 3:
         for bullet in playerStats.bullets:
             drawLine(bullet['x']-bullet['vx']*1, bullet['y']-bullet['vy']*1, bullet['x'], bullet['y'], lineWidth=playerStats.bulletSize, fill=rgb(255, 255, 255))
+    elif playerStats.playerType == 4:
+            for bullet in playerStats.bullets:
+                drawCircle(bullet['x'], bullet['y'], playerStats.bulletSize, fill=rgb(255, 150, 0), border=rgb(255, 255, 255), borderWidth=1)
+                # Bullet trail
+                drawCircle(bullet['x'], bullet['y'], playerStats.bulletSize + 3, fill=rgb(255, 150, 0), opacity=10)
+                drawCircle(bullet['x']-bullet['vx']*0.2, bullet['y']-bullet['vy']*0.2, playerStats.bulletSize + 2, fill=rgb(255, 150, 0), opacity=8)
+                drawCircle(bullet['x']-bullet['vx']*0.4, bullet['y']-bullet['vy']*0.4, playerStats.bulletSize + 1, fill=rgb(255, 150, 0), opacity=6)
+                drawCircle(bullet['x']-bullet['vx']*0.6, bullet['y']-bullet['vy']*0.6, playerStats.bulletSize, fill=rgb(255, 150, 0), opacity=4)
     
     # Glow trails
     trail()
@@ -523,6 +592,8 @@ def redrawAll(app):
         playerStats.player2(playerStats.playerX, playerStats.playerY, playerStats.playerAngle, (35 if enemyStats.playerInvuln % 8 < 4 and enemyStats.playerInvuln > 0 else 100))
     elif playerStats.playerType == 3:
         playerStats.player3(playerStats.playerX, playerStats.playerY, playerStats.playerAngle, (35 if enemyStats.playerInvuln % 8 < 4 and enemyStats.playerInvuln > 0 else 100))
+    elif playerStats.playerType == 4:
+        playerStats.player4(playerStats.playerX, playerStats.playerY, playerStats.playerAngle, (35 if enemyStats.playerInvuln % 8 < 4 and enemyStats.playerInvuln > 0 else 100))
     
     # Enemies
     for enemy in enemyStats.enemies:
