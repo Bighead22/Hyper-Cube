@@ -34,7 +34,7 @@ def onAppStart(app):
         playerStats.bulletSize = 3
         playerStats.bulletSpeed = 15
         
-
+    upgrades.openShop()
 
 def onMousePress(app, mouseX, mouseY):
     if upgrades.uV:
@@ -532,7 +532,7 @@ def drawShop(app):
     drawRect(0, 0, 1000, 1000, fill='black', opacity=65)
     drawLabel('UPGRADES', 500, 110, size=40, fill='white', bold=True)
     drawLabel(f'Coins: {int(stats.coins)}', 500, 155, size=22, fill=rgb(255, 220, 0), bold=True)
-    drawLabel(f'Click a card to buy   |   E: reroll ({upgrades.rerollCost} coins)   |   S: close', 500, 190, size=18, fill='white')
+    drawLabel(f'Click a card to buy   |   E: reroll ({upgrades.rerollCost} coins)   |   ESC : close', 500, 190, size=18, fill='white')
     for i, choice in enumerate(upgrades.currentChoices):
         if choice is None:
             continue

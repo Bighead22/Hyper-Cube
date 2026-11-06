@@ -19,3 +19,14 @@ def isColiding(app, c1x, c1y, c2x, c2y, hitboxSize):
 #((10sin(0.2x)+2x)-25)x/500
 def difficulty(time):
     return (((10*math.sin((0.3*time))) + 2*time)-25)*time/750
+
+def getPlayerType(filename):
+    with open(filename, "r") as file:
+        content = file.read().split()
+        if content:
+            return float(content[-1])  # Use int(content[-1]) if only whole numbers
+    return None
+
+def setPlayerType(filename, playerType):
+    with open(filename, "w") as file:
+        file.write(str(playerType))

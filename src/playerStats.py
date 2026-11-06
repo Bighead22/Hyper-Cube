@@ -4,7 +4,7 @@ import math
 import stats
 
 
-playerStats.playerType = 4
+playerStats.playerType = stats.getPlayerType("src\\playerSelection.txt")
 
 #p1 Specific
 playerStats.dashsize = 10
