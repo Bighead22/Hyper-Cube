@@ -56,7 +56,9 @@ def bossTexture(x, y, r, o):
 # ---------- Boss settings (tweak these!) ----------
 enemyStats.bossInterval = 90        # seconds between boss spawns
 enemyStats.nextBossTime = 60        # game time (seconds) of the next boss
-enemyStats.boss = None              # the live boss (None when there isn't one)
+enemyStats.bosses = []              # all live bosses (several can exist after the first)
+enemyStats.bossesSpawned = 0        # how many bosses have spawned so far
+enemyStats.firstBossKilled = False  # once True, normal enemies keep spawning during boss fights
 enemyStats.bossOrbs = []            # orbs currently flying around
 enemyStats.bossSize = 50
 enemyStats.bossBaseHp = 10000        # multiplied by enemyHpMultiplier (never below 1x)
@@ -80,7 +82,7 @@ def spawnBoss(playerX, playerY, hpMultiplier):
         if math.hypot(x - playerX, y - playerY) >= 400:
             break
     hp = enemyStats.bossBaseHp * max(1, hpMultiplier)
-    enemyStats.boss = {
+    enemyStats.bosses.append({
         'x': x, 'y': y, 'vx': 0, 'vy': 0,
         'hp': hp, 'maxHp': hp,
         'size': enemyStats.bossSize,
@@ -88,7 +90,8 @@ def spawnBoss(playerX, playerY, hpMultiplier):
         'spawn': enemyStats.bossSpawnGrace,
         'cd': enemyStats.bossAttackCD,
         'ringOffset': 0,
-    }
+    })
+    enemyStats.bossesSpawned += 1
 
 def fireOrbRing(boss):
     # Radial attack: a ring of orbs shooting out in all directions.

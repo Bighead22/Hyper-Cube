@@ -4,7 +4,7 @@ import math
 import stats
 
 
-playerStats.playerType = 3
+playerStats.playerType = 4
 
 #p1 Specific
 playerStats.dashsize = 10
@@ -67,7 +67,7 @@ def dashing(key):
 def converge(key):
     if key == 'space':
         if playerStats.bulletCount > 1:
-            playerStats.bulletDamage *= (playerStats.bulletCount/2)
+            playerStats.bulletDamage *= (playerStats.bulletCount/3)
             playerStats.bulletSize += playerStats.bulletCount
             playerStats.bulletCount = 1
 def escape(key):
